@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MessageSquare, Bell, Camera, Shield, User, BellRing, Lock, HelpCircle, Info, ChevronRight, LogOut, Moon, Sun, Link, Mail, Send, Check, X, Users } from 'lucide-react';
 import { ViewState, AuthProvider, UserProfile } from '../types';
@@ -38,13 +39,50 @@ const ProfileView: React.FC<ProfileViewProps> = ({
   const isGoogleConnected = connectedProviders.includes('google');
   const isTelegramConnected = connectedProviders.includes('telegram');
 
+  // --- Backend Linking Helper ---
+  const linkAccountBackend = async (provider: AuthProvider, data: any) => {
+      if (!userProfile?.id) {
+          alert("User session invalid. Please log in again.");
+          return;
+      }
+      
+      try {
+          const res = await axios.post('/api/user/link-account', {
+              provider,
+              providerId: data.id
+          }, {
+              headers: { 'x-user-id': userProfile.id }
+          });
+          
+          if (res.data.success) {
+              onLinkProvider(provider);
+              if (res.data.message !== 'Account already linked') {
+                  // Only alert if it wasn't a silent success
+                  // alert(`${provider} account linked successfully!`); 
+              }
+          }
+      } catch (error: any) {
+          if (error.response && error.response.status === 409) {
+              alert(`This ${provider} account is already linked to another user.`);
+          } else {
+              console.error(error);
+              alert("Failed to link account. Please try again.");
+          }
+      }
+  };
+
   // --- Google Linking Logic ---
   const linkGoogle = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-        // In a real app, send token to backend to merge accounts.
-        // For now, we just update local state.
-        console.log("Google Linked Successfully", tokenResponse);
-        onLinkProvider('google');
+    onSuccess: async (tokenResponse) => {
+        try {
+            const userInfo = await axios.get(
+              'https://www.googleapis.com/oauth2/v3/userinfo',
+              { headers: { Authorization: `Bearer ${tokenResponse.access_token}` } }
+            );
+            await linkAccountBackend('google', { id: userInfo.data.sub });
+        } catch (error) {
+            console.error('Failed to link Google:', error);
+        }
     },
     onError: error => console.error('Failed to link Google:', error),
   });
@@ -57,8 +95,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         
         // Define callback for linking
         (window as any).onTelegramLink = (user: any) => {
-            console.log("Telegram Linked Successfully", user);
-            onLinkProvider('telegram');
+            linkAccountBackend('telegram', { id: user.id });
         };
 
         // Clear previous content
@@ -71,7 +108,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         script.setAttribute('data-radius', '8');
         script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-userpic', 'false');
-        script.setAttribute('data-onauth', 'onTelegramLink(user)'); // Different callback name
+        script.setAttribute('data-onauth', 'onTelegramLink(user)'); // Callback
         script.async = true;
 
         telegramLinkRef.current.appendChild(script);
@@ -80,7 +117,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
 
 
   // Determine display name
-  // If Telegram gives us a First Name, use it. Otherwise fallback to Username, then default.
   const displayName = userProfile?.firstName 
     ? `${userProfile.firstName} ${userProfile.lastName || ''}`.trim() 
     : (userProfile?.username || 'NexxTrader');

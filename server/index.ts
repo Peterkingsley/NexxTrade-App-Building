@@ -214,6 +214,45 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// New endpoint to link an account from profile settings (enforces uniqueness)
+app.post('/api/user/link-account', async (req, res) => {
+    const userId = getUserId(req);
+    const { provider, providerId } = req.body;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!provider || !providerId) return res.status(400).json({ error: 'Missing provider data' });
+
+    try {
+        // Check if this provider account is already linked
+        const existing = await query(
+            'SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2',
+            [provider, providerId.toString()]
+        );
+
+        if (existing.rows.length > 0) {
+            const linkedUserId = existing.rows[0].user_id;
+            if (linkedUserId === userId) {
+                // Linked to self: Idempotent success
+                return res.json({ success: true, message: 'Account already linked' });
+            } else {
+                // Linked to someone else: Conflict
+                return res.status(409).json({ error: 'Account linked to another user' });
+            }
+        }
+
+        // Perform Link
+        await query(
+            'INSERT INTO linked_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)',
+            [userId, provider, providerId.toString()]
+        );
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Link Account Error:', error);
+        res.status(500).json({ error: 'Failed to link account' });
+    }
+});
+
 app.get('/api/signals', async (req, res) => {
   try {
     const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'signals')");
