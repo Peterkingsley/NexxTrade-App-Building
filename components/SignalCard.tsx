@@ -1,19 +1,60 @@
-import React, { useState } from 'react';
-import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode, TrendingUp, TrendingDown } from 'lucide-react';
 import { Signal } from '../types';
 
 interface SignalCardProps {
   signal: Signal;
+  livePrice?: number;
 }
 
-const SignalCard: React.FC<SignalCardProps> = ({ signal }) => {
+const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  
+  // State for price flash animation
+  const [prevPrice, setPrevPrice] = useState<number | undefined>(undefined);
+  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'neutral'>('neutral');
 
   const isLocked = signal.entry === 'Locked' || !signal.slUnlock;
   const isClosed = signal.status === 'closed';
+
+  // Calculate live PnL if available and not locked
+  let livePnl = null;
+  if (livePrice && !isLocked && signal.status === 'active' && signal.entry !== 'Locked') {
+      const entryPrice = parseFloat(signal.entry.replace(/,/g, ''));
+      if (!isNaN(entryPrice) && entryPrice > 0) {
+          // Calculate percentage difference
+          const diff = ((livePrice - entryPrice) / entryPrice) * 100;
+          // Invert if Short (assuming typical Futures signals where we might infer direction, 
+          // usually signals imply Long unless specified. For this demo, let's assume Long for positive logic or parse PnL)
+          // Since mock data has static PnL, we can use that to infer direction? 
+          // Simplification: Assume Long for now, or use static PnL direction
+          
+          // Better logic: If static PnL is negative, assume Short? No, that just means losing trade.
+          // Let's assume standard Longs for simplicity unless we add 'side' to Signal type.
+          livePnl = diff;
+      }
+  }
+
+  // Handle price flash effect
+  useEffect(() => {
+      if (!livePrice) return;
+      
+      if (prevPrice !== undefined) {
+          if (livePrice > prevPrice) {
+              setPriceDirection('up');
+          } else if (livePrice < prevPrice) {
+              setPriceDirection('down');
+          }
+      }
+      
+      const timer = setTimeout(() => setPriceDirection('neutral'), 1000);
+      setPrevPrice(livePrice);
+      
+      return () => clearTimeout(timer);
+  }, [livePrice]);
 
   const handleAnalysisClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,6 +123,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal }) => {
     </button>
   );
 
+  // Determine display PnL (Use live if active & available, else static)
+  const displayPnl = (livePnl !== null && signal.status === 'active') ? livePnl : signal.pnl;
+  const pnlColorClass = displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+
   return (
     <>
       <div 
@@ -117,14 +162,17 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal }) => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 shrink-0">
-             <span className={`text-xl sm:text-2xl font-bold tracking-tight ${signal.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {signal.pnl > 0 ? '+' : ''}{signal.pnl}%
+          <div className="flex flex-col items-end shrink-0">
+             <span className={`text-xl sm:text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
+                {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
              </span>
-             {isClosed && (
-                 <button className="text-gray-500 hover:text-white transition-colors z-20 p-1 -mr-2">
-                     <Share2 size={18} />
-                 </button>
+             {/* Live Price Display */}
+             {livePrice && (
+                 <div className={`flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-300 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
+                     {livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                     {priceDirection === 'up' && <TrendingUp size={10} />}
+                     {priceDirection === 'down' && <TrendingDown size={10} />}
+                 </div>
              )}
           </div>
         </div>

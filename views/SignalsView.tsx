@@ -6,9 +6,10 @@ import { Signal, ViewState } from '../types';
 interface SignalsViewProps {
   onNavigate: (view: ViewState) => void;
   mockSignals: Signal[];
+  livePrices: Record<string, number>;
 }
 
-const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals }) => {
+const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals, livePrices }) => {
   const [filter, setFilter] = useState<'All' | 'Active' | 'Closed' | 'Spot'>('All');
   const [groupsLabel, setGroupsLabel] = useState('Groups');
 
@@ -88,9 +89,10 @@ const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals }) =>
 
       {/* Signals List */}
       <div className="px-4 space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
-        {filteredSignals.map((signal, idx) => (
-            <SignalCard key={idx} signal={signal} />
-        ))}
+        {filteredSignals.map((signal, idx) => {
+            const priceKey = signal.pair.replace('/', '').toUpperCase();
+            return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
+        })}
         {filteredSignals.length === 0 && (
             <div className="col-span-full py-20 text-center text-gray-500">
                 No signals found for this category.

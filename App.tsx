@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import AuthView from './views/AuthView';
@@ -15,6 +15,7 @@ import ReferralsView from './views/ReferralsView';
 import IntroView from './views/IntroView';
 import ReferralInputView from './views/ReferralInputView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
+import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile } from './types';
 
 // Mock Data
@@ -26,15 +27,15 @@ const MOCK_SIGNALS: Signal[] = [
     status: 'active',
     pnl: 18,
     timeAgo: '2h ago',
-    entry: '42,800',
-    stopLoss: '41,500',
+    entry: '96200',
+    stopLoss: '95500',
     tpTargets: [
-      { price: '43,500', hit: true },
-      { price: '44,200', hit: false },
-      { price: '45,000', hit: false },
+      { price: '97500', hit: true },
+      { price: '98200', hit: false },
+      { price: '99000', hit: false },
     ],
     slUnlock: true,
-    analysis: 'Bitcoin has reclaimed the 200-day EMA and formed a bullish flag pattern on the 4H chart. We are seeing strong volume inflow at the $42.8k support level.',
+    analysis: 'Bitcoin has reclaimed the 200-day EMA and formed a bullish flag pattern on the 4H chart. We are seeing strong volume inflow at the support level.',
     riskManagement: 'High volatility expected due to upcoming FOMC news. Keep leverage below 10x and strictly adhere to the stop loss. Consider taking partial profits early.'
   },
   {
@@ -44,12 +45,12 @@ const MOCK_SIGNALS: Signal[] = [
     status: 'active',
     pnl: 12,
     timeAgo: '3h ago',
-    entry: '2,250',
-    stopLoss: '2,180',
+    entry: '2650',
+    stopLoss: '2580',
     tpTargets: [
-      { price: '2,300', hit: true },
-      { price: '2,350', hit: false },
-      { price: '2,450', hit: false },
+      { price: '2700', hit: true },
+      { price: '2750', hit: false },
+      { price: '2850', hit: false },
     ],
     slUnlock: true,
     analysis: 'Ethereum is bouncing off a key demand zone. The ETH/BTC pair is showing strength, indicating potential outperformance against Bitcoin in the short term.',
@@ -62,12 +63,12 @@ const MOCK_SIGNALS: Signal[] = [
     status: 'active',
     pnl: 45,
     timeAgo: '4h ago',
-    entry: '98.50',
-    stopLoss: '95.00',
+    entry: '188.50',
+    stopLoss: '182.00',
     tpTargets: [
-        { price: '$102.00', hit: true },
-        { price: '$105.00', hit: true },
-        { price: '$110.00', hit: false },
+        { price: '195.00', hit: true },
+        { price: '200.00', hit: true },
+        { price: '210.00', hit: false },
     ],
     slUnlock: true,
     analysis: 'Solana broke out of a multi-week consolidation wedge. On-chain activity is spiking, supporting the bullish thesis.',
@@ -97,15 +98,15 @@ const MOCK_SIGNALS: Signal[] = [
     status: 'closed',
     pnl: 85,
     timeAgo: '1d ago',
-    entry: '0.5500',
-    stopLoss: '0.5300',
+    entry: '2.4000',
+    stopLoss: '2.3000',
     tpTargets: [
-        { price: '0.5800', hit: true },
-        { price: '0.6000', hit: true },
+        { price: '2.5000', hit: true },
+        { price: '2.6000', hit: true },
     ],
     slUnlock: true,
     analysis: 'Ripple legal news catalyst provided a strong impulse leg up. We rode the wave to TP2.',
-    riskManagement: 'Trade closed. Do not re-enter at current levels. Wait for a pullback to the 0.58 support flip.'
+    riskManagement: 'Trade closed. Do not re-enter at current levels. Wait for a pullback to the support flip.'
   },
   {
     id: '6',
@@ -162,11 +163,11 @@ const MOCK_SIGNALS: Signal[] = [
     status: 'active',
     pnl: -2,
     timeAgo: '30m ago',
-    entry: '0.8500',
-    stopLoss: '0.8200',
+    entry: '0.4500',
+    stopLoss: '0.4200',
     tpTargets: [
-        { price: '0.8800', hit: false },
-        { price: '0.9200', hit: false },
+        { price: '0.4800', hit: false },
+        { price: '0.5200', hit: false },
     ],
     slUnlock: true,
     analysis: 'Polygon zkEVM adoption increasing. Short term bearish divergence on RSI suggests a quick scalp opportunity.',
@@ -227,6 +228,15 @@ const App: React.FC = () => {
   // New state to track all connected providers
   const [connectedProviders, setConnectedProviders] = useState<AuthProvider[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // --- Live Pricing Integration ---
+  // Extract unique pairs from signals to subscribe to
+  const signalPairs = useMemo(() => {
+    return Array.from(new Set(MOCK_SIGNALS.map(s => s.pair)));
+  }, []);
+  
+  // Get live prices map: { "BTCUSDT": 42000.00, ... }
+  const livePrices = useBinancePrices(signalPairs);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -309,9 +319,9 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <HomeView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} />;
+        return <HomeView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} livePrices={livePrices} />;
       case 'signals':
-        return <SignalsView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} />;
+        return <SignalsView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} livePrices={livePrices} />;
       case 'signal-history':
         return <SignalHistoryView onBack={handleBack} signals={MOCK_SIGNALS} />;
       case 'performance':
@@ -337,7 +347,7 @@ const App: React.FC = () => {
       case 'referrals':
         return <ReferralsView onBack={handleBack} />;
       default:
-        return <HomeView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} />;
+        return <HomeView onNavigate={handleNavigate} mockSignals={MOCK_SIGNALS} livePrices={livePrices} />;
     }
   };
 

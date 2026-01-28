@@ -6,13 +6,14 @@ import { Signal, ViewState } from '../types';
 interface HomeViewProps {
   onNavigate: (view: ViewState) => void;
   mockSignals: Signal[];
+  livePrices: Record<string, number>;
 }
 
 const ANNOUNCEMENTS = [
     {
         id: 1,
         title: "BTC Breaking Major Resistance",
-        message: "Watch $44k level closely. High volume confirmation needed.",
+        message: "Watch $99k level closely. High volume confirmation needed.",
         icon: Megaphone,
         colorClass: "bg-brand-green",
         textClass: "text-dark-900",
@@ -41,7 +42,7 @@ const ANNOUNCEMENTS = [
     }
 ];
 
-const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals }) => {
+const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals, livePrices }) => {
   const [groupsLabel, setGroupsLabel] = useState('Groups');
   const [activeAnnouncement, setActiveAnnouncement] = useState(0);
 
@@ -175,9 +176,11 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals }) => {
             </div>
             
             <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
-                {mockSignals.slice(0, 3).map((signal, idx) => (
-                    <SignalCard key={idx} signal={signal} />
-                ))}
+                {mockSignals.slice(0, 3).map((signal, idx) => {
+                     // Construct key for price lookup (e.g. BTC/USDT -> BTCUSDT)
+                     const priceKey = signal.pair.replace('/', '').toUpperCase();
+                     return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
+                })}
             </div>
         </div>
       </div>
