@@ -15,7 +15,7 @@ import ReferralsView from './views/ReferralsView';
 import IntroView from './views/IntroView';
 import ReferralInputView from './views/ReferralInputView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
-import { ViewState, Signal, AuthProvider } from './types';
+import { ViewState, Signal, AuthProvider, UserProfile } from './types';
 
 // Mock Data
 const MOCK_SIGNALS: Signal[] = [
@@ -222,6 +222,7 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showTour, setShowTour] = useState(false);
   const [authProvider, setAuthProvider] = useState<AuthProvider>('google');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -235,8 +236,11 @@ const App: React.FC = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const handleLogin = (provider: AuthProvider) => {
+  const handleLogin = (provider: AuthProvider, userData?: UserProfile) => {
     setAuthProvider(provider);
+    if (userData) {
+      setUserProfile(userData);
+    }
     // Instead of going straight to home, go to referral input
     setCurrentView('referral-input');
   };
@@ -249,6 +253,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setCurrentView('auth');
+    setUserProfile(null);
   };
 
   const handleNavigate = (view: ViewState) => {
@@ -301,7 +306,7 @@ const App: React.FC = () => {
       case 'academy':
         return <AcademyView onNavigate={handleNavigate} />;
       case 'profile':
-        return <ProfileView onNavigate={handleNavigate} onLogout={handleLogout} isDarkMode={isDarkMode} toggleTheme={toggleTheme} authProvider={authProvider} />;
+        return <ProfileView onNavigate={handleNavigate} onLogout={handleLogout} isDarkMode={isDarkMode} toggleTheme={toggleTheme} authProvider={authProvider} userProfile={userProfile} />;
       case 'notifications':
         return <NotificationsView onBack={handleBack} />;
       case 'notification-settings':

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MessageSquare, Bell, Camera, Shield, User, BellRing, Lock, HelpCircle, Info, ChevronRight, LogOut, Moon, Sun, Link, Mail, Send, Check, X, Users } from 'lucide-react';
-import { ViewState, AuthProvider } from '../types';
+import { ViewState, AuthProvider, UserProfile } from '../types';
 
 interface ProfileViewProps {
   onNavigate: (view: ViewState) => void;
@@ -8,9 +8,10 @@ interface ProfileViewProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   authProvider: AuthProvider;
+  userProfile: UserProfile | null;
 }
 
-const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkMode, toggleTheme, authProvider }) => {
+const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkMode, toggleTheme, authProvider, userProfile }) => {
   const [showConnections, setShowConnections] = useState(false);
   const [groupsLabel, setGroupsLabel] = useState('Groups');
 
@@ -23,6 +24,16 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
   // In a real app, this would be fetched from user profile
   const isGoogleConnected = authProvider === 'google';
   const isTelegramConnected = authProvider === 'telegram';
+
+  // Determine display name
+  const displayName = userProfile 
+    ? `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim() || userProfile.username 
+    : 'NexxTrader';
+  
+  // Determine display username/status
+  const displayStatus = userProfile?.username 
+    ? `@${userProfile.username}` 
+    : 'Elite Member';
 
   return (
     <div className="pb-24">
@@ -48,15 +59,23 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
 
       <div className="px-4 flex flex-col items-center mt-6 mb-8">
         <div className="relative mb-4">
-            <div className="w-28 h-28 rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden border-4 border-dark-900 shadow-xl transition-colors duration-300">
-                 <User size={64} className="text-emerald-900 opacity-50" />
+            <div className="w-28 h-28 rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden border-4 border-dark-900 shadow-xl transition-colors duration-300 relative group">
+                 {userProfile?.photoUrl ? (
+                    <img 
+                      src={userProfile.photoUrl} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                    />
+                 ) : (
+                    <User size={64} className="text-emerald-900 opacity-50" />
+                 )}
             </div>
             <button className="absolute bottom-0 right-0 p-2 bg-emerald-600 rounded-full text-white border-4 border-dark-900 hover:bg-emerald-500 transition shadow-lg">
                 <Camera size={16} />
             </button>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-1">Moreblessing NexxTrader</h2>
-        <p className="text-gray-400 text-sm">Elite Member</p>
+        <h2 className="text-2xl font-bold text-white mb-1">{displayName}</h2>
+        <p className="text-gray-400 text-sm">{displayStatus}</p>
       </div>
 
       <div className="px-4 space-y-4">

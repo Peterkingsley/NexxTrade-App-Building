@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Send } from 'lucide-react';
-import { AuthProvider } from '../types';
+import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
-  onLogin: (provider: AuthProvider) => void;
+  onLogin: (provider: AuthProvider, userData?: UserProfile) => void;
 }
 
 // Bot username provided
@@ -16,8 +16,17 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
     // 1. Define the callback function that Telegram calls upon successful login
     (window as any).onTelegramAuth = (user: any) => {
       console.log("Telegram User Data:", user);
-      // In a production app, send user.hash to backend for verification
-      onLogin('telegram');
+      
+      // Map Telegram data to our UserProfile interface
+      const userData: UserProfile = {
+        id: user.id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        username: user.username,
+        photoUrl: user.photo_url
+      };
+
+      onLogin('telegram', userData);
     };
 
     // 2. Inject the Telegram script
@@ -88,7 +97,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 {/* Fallback button shown if JS is disabled or domain not whitelisted yet */}
                 <button 
                     onClick={() => {
-                        alert("If the widget is not appearing, please whitelist your domain in @BotFather using /setdomain");
+                        // Fallback simulated login
                         onLogin('telegram');
                     }}
                     className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
@@ -98,10 +107,6 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 </button>
              </div>
           </div>
-          
-          <p className="text-[10px] text-gray-600 text-center mt-2 px-4">
-             Note: You must run <b>/setdomain</b> in @BotFather for your site URL for the button to appear.
-          </p>
         </div>
 
         <div className="text-center">

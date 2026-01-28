@@ -1,7 +1,16 @@
 
+
 export type ViewState = 'intro' | 'auth' | 'referral-input' | 'home' | 'signals' | 'signal-history' | 'performance' | 'academy' | 'profile' | 'notifications' | 'subscription' | 'notification-settings' | 'referrals';
 
 export type AuthProvider = 'google' | 'telegram';
+
+export interface UserProfile {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  photoUrl?: string;
+}
 
 export interface Signal {
   id: string;
