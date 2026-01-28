@@ -21,7 +21,7 @@ const pool = new Pool({
   // Pool optimization settings
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
 });
 
 // Helper method for executing queries with logging
@@ -48,9 +48,23 @@ export const checkDatabaseConnection = async () => {
         console.log('Database connected successfully:', res.rows[0].now);
         return true;
     } catch (err) {
-        console.error('Database connection failed:', err);
+        // Only log error message to keep logs clean during retries
+        console.error('Database connection check failed:', (err as Error).message);
         return false;
     }
+};
+
+// Robust retry mechanism for server startup
+export const waitForDatabase = async (retries = 10, delay = 3000) => {
+  console.log(`Attempting to connect to database (Max retries: ${retries})...`);
+  for (let i = 0; i < retries; i++) {
+    const isConnected = await checkDatabaseConnection();
+    if (isConnected) return true;
+    
+    console.log(`Database not ready. Retrying in ${delay/1000}s... (${i + 1}/${retries})`);
+    await new Promise(res => setTimeout(res, delay));
+  }
+  return false;
 };
 
 export default pool;

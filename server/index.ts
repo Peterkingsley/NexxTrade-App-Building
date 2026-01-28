@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { query } from './db';
+import { query, waitForDatabase } from './db';
 import crypto from 'crypto';
 
 dotenv.config();
@@ -24,6 +24,122 @@ const getUserId = (req: express.Request): string | null => {
     return typeof userId === 'string' ? userId : null;
 };
 
+// --- Database Initialization ---
+// Automatically creates ALL necessary tables based on database.sql schema
+const initDb = async () => {
+    try {
+        console.log("Initializing database schema...");
+        
+        // 1. Enable UUID extension
+        await query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"').catch(err => console.log('UUID extension might already exist (skipping)'));
+
+        // 2. Users Table
+        await query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255),
+                full_name VARCHAR(100),
+                username VARCHAR(50) UNIQUE,
+                photo_url TEXT,
+                role VARCHAR(20) DEFAULT 'user',
+                subscription_plan VARCHAR(20) DEFAULT 'free',
+                subscription_expiry TIMESTAMPTZ,
+                referral_code VARCHAR(20) UNIQUE,
+                referred_by UUID REFERENCES users(id),
+                wallet_balance DECIMAL(15, 2) DEFAULT 0.00,
+                is_email_verified BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+
+        // 3. Linked Accounts
+        await query(`
+            CREATE TABLE IF NOT EXISTS linked_accounts (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR(50) NOT NULL,
+                provider_user_id VARCHAR(255) NOT NULL,
+                linked_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(provider, provider_user_id)
+            )
+        `);
+
+        // 4. Signals
+        await query(`
+            CREATE TABLE IF NOT EXISTS signals (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                pair VARCHAR(20) NOT NULL,
+                type VARCHAR(20) NOT NULL,
+                side VARCHAR(10) NOT NULL,
+                status VARCHAR(20) DEFAULT 'active',
+                entry_price_display VARCHAR(100) NOT NULL,
+                entry_price_min DECIMAL(20, 8),
+                entry_price_max DECIMAL(20, 8),
+                stop_loss_price VARCHAR(100) NOT NULL,
+                pnl_percentage DECIMAL(8, 2) DEFAULT 0.00,
+                max_gain DECIMAL(8, 2) DEFAULT 0.00,
+                analysis_text TEXT,
+                risk_management_text TEXT,
+                chart_image_url TEXT,
+                is_sl_unlocked BOOLEAN DEFAULT TRUE,
+                requires_subscription VARCHAR(20) DEFAULT 'free',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                closed_at TIMESTAMPTZ,
+                created_by UUID REFERENCES users(id)
+            )
+        `);
+
+        // 5. Signal Targets
+        await query(`
+            CREATE TABLE IF NOT EXISTS signal_targets (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                signal_id UUID REFERENCES signals(id) ON DELETE CASCADE,
+                target_price VARCHAR(50) NOT NULL,
+                target_order INTEGER NOT NULL,
+                is_hit BOOLEAN DEFAULT FALSE,
+                hit_at TIMESTAMPTZ
+            )
+        `);
+
+        // 6. Withdrawals
+        await query(`
+            CREATE TABLE IF NOT EXISTS withdrawals (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                amount DECIMAL(15, 2) NOT NULL,
+                network VARCHAR(50) NOT NULL,
+                wallet_address VARCHAR(255) NOT NULL,
+                status VARCHAR(20) DEFAULT 'Pending',
+                tx_hash VARCHAR(255),
+                rejection_reason TEXT,
+                requested_at TIMESTAMPTZ DEFAULT NOW(),
+                processed_at TIMESTAMPTZ
+            )
+        `);
+
+        // 7. Notifications (Optional but good for full functionality)
+        await query(`
+             CREATE TABLE IF NOT EXISTS notifications (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                link_url TEXT,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+
+        console.log("Database schema verified/updated successfully.");
+    } catch (error) {
+        console.error("Failed to initialize database:", error);
+        // Do not exit, allow partial functionality or retries on request
+    }
+};
+
 // --- API Routes ---
 
 // POST /api/auth/login - Handle Sign Up / Login for Google, Telegram, Email
@@ -36,19 +152,16 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         // 1. Check if user exists by Email (for Google/Email) or Username (Telegram)
-        // We prioritize email for uniqueness
         let userRes;
         
         if (email) {
             userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
         } else {
             // Telegram might not provide email, use username match or provider link
-            // First check linked accounts to find user_id
             const linkRes = await query('SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2', [provider, providerId]);
             if (linkRes.rows.length > 0) {
                 userRes = await query('SELECT * FROM users WHERE id = $1', [linkRes.rows[0].user_id]);
             } else {
-                // Fallback to username check
                  userRes = await query('SELECT * FROM users WHERE username = $1', [username]);
             }
         }
@@ -70,16 +183,20 @@ app.post('/api/auth/login', async (req, res) => {
             isNewUser = true;
             const refCode = generateReferralCode();
             const fullName = `${firstName} ${lastName || ''}`.trim();
-            
-            // Handle cases where email might be missing (Telegram sometimes)
-            // If email is missing, generate a dummy one based on provider ID to satisfy NOT NULL constraint
             const finalEmail = email || `${providerId}@telegram.nexxtrade.com`;
+            
+            // Ensure unique username
+            let finalUsername = username || `user_${crypto.randomBytes(4).toString('hex')}`;
+            const checkUser = await query('SELECT id FROM users WHERE username = $1', [finalUsername]);
+            if (checkUser.rows.length > 0) {
+                finalUsername = `${finalUsername}_${Math.floor(Math.random() * 1000)}`;
+            }
 
             const insertRes = await query(`
                 INSERT INTO users (email, full_name, username, photo_url, referral_code, wallet_balance, is_email_verified)
                 VALUES ($1, $2, $3, $4, $5, 0.00, $6)
                 RETURNING *
-            `, [finalEmail, fullName, username || `user_${crypto.randomBytes(4).toString('hex')}`, photoUrl, refCode, provider === 'google']);
+            `, [finalEmail, fullName, finalUsername, photoUrl, refCode, provider === 'google']);
             
             userId = insertRes.rows[0].id;
             userData = insertRes.rows[0];
@@ -94,7 +211,6 @@ app.post('/api/auth/login', async (req, res) => {
             `, [userId, provider, providerId.toString()]);
         }
 
-        // Return the user profile
         res.json({
             id: userData.id,
             firstName: firstName,
@@ -115,6 +231,12 @@ app.post('/api/auth/login', async (req, res) => {
 // GET /api/signals - Fetch all signals with their targets
 app.get('/api/signals', async (req, res) => {
   try {
+    // Robust check for table existence
+    const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'signals')");
+    if (!checkTable.rows[0].exists) {
+        return res.json([]); 
+    }
+
     const result = await query(`
       SELECT 
         s.id, s.pair, s.type, s.side, s.status, 
@@ -160,27 +282,29 @@ app.get('/api/signals', async (req, res) => {
   }
 });
 
-// --- Referral & Withdrawal Routes (Updated to use Real User) ---
-
 // GET /api/referrals/my-stats
 app.get('/api/referrals/my-stats', async (req, res) => {
     try {
         const userId = getUserId(req);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         
-        const [userRes, refRes, withdrawRes] = await Promise.all([
+        // We verify table exists to prevent crash if referral features aren't used yet
+        const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'withdrawals')");
+        const totalWithdrawn = checkTable.rows[0].exists 
+            ? (await query('SELECT COALESCE(SUM(amount), 0) as total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = $2', [userId, 'Completed'])).rows[0].total_withdrawn
+            : 0;
+
+        const [userRes, refRes] = await Promise.all([
             query('SELECT wallet_balance, referral_code FROM users WHERE id = $1', [userId]),
-            query('SELECT COUNT(*) as count FROM users WHERE referred_by = $1', [userId]),
-            query('SELECT COALESCE(SUM(amount), 0) as total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = $2', [userId, 'Completed'])
+            query('SELECT COUNT(*) as count FROM users WHERE referred_by = $1', [userId])
         ]);
 
         if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const user = userRes.rows[0];
         const referralCount = parseInt(refRes.rows[0].count);
-        const totalWithdrawn = parseFloat(withdrawRes.rows[0].total_withdrawn);
         const pendingBalance = parseFloat(user.wallet_balance);
-        const totalEarnings = pendingBalance + totalWithdrawn;
+        const totalEarnings = pendingBalance + parseFloat(totalWithdrawn);
 
         res.json({
             pendingBalance,
@@ -199,6 +323,9 @@ app.get('/api/withdrawals', async (req, res) => {
     try {
         const userId = getUserId(req);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'withdrawals')");
+        if (!checkTable.rows[0].exists) return res.json([]);
 
         const result = await query('SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY requested_at DESC', [userId]);
         
@@ -272,6 +399,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
-app.listen(PORT, () => {
-  console.log(`API Server running on http://localhost:${PORT}`);
-});
+// --- Server Startup with Retry ---
+const startServer = async () => {
+    // Wait up to 30 seconds (10 attempts * 3s) for DB to be ready
+    const connected = await waitForDatabase(10, 3000);
+    
+    if (!connected) {
+        console.error("CRITICAL: Could not connect to database after multiple attempts. Exiting process.");
+        // We exit with error to let orchestration restart us
+        (process as any).exit(1); 
+    }
+    
+    // Once connected, verify/create schema
+    await initDb();
+    
+    app.listen(PORT, () => {
+      console.log(`API Server running on http://localhost:${PORT}`);
+    });
+};
+
+startServer();
