@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { AuthProvider } from '../types';
 
@@ -6,8 +6,43 @@ interface AuthViewProps {
   onLogin: (provider: AuthProvider) => void;
 }
 
+// Bot username provided
+const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
+
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+
+  useEffect(() => {
+    // 1. Define the callback function that Telegram calls upon successful login
+    (window as any).onTelegramAuth = (user: any) => {
+      console.log("Telegram User Data:", user);
+      // In a production app, send user.hash to backend for verification
+      onLogin('telegram');
+    };
+
+    // 2. Inject the Telegram script
+    const script = document.createElement('script');
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-radius', '16');
+    script.setAttribute('data-request-access', 'write');
+    script.setAttribute('data-userpic', 'false');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    script.async = true;
+
+    const container = document.getElementById('telegram-login-container');
+    if (container) {
+        // Clear the container to remove the fallback button before appending the widget
+        container.innerHTML = '';
+        container.appendChild(script);
+    }
+
+    return () => {
+      // Cleanup global callback if needed
+      // (window as any).onTelegramAuth = undefined;
+    };
+  }, [onLogin]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-dark-900 relative overflow-hidden">
@@ -33,6 +68,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         </p>
 
         <div className="w-full space-y-4 mb-12">
+          {/* Google Button */}
           <button 
             onClick={() => onLogin('google')}
             className="w-full bg-gray-200 hover:bg-white text-dark-900 font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors"
@@ -46,13 +82,26 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             Continue with Google
           </button>
 
-          <button 
-            onClick={() => onLogin('telegram')}
-            className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
-          >
-            <Send className="w-5 h-5" fill="currentColor" />
-            Continue with Telegram
-          </button>
+          {/* Telegram Login Widget Container */}
+          <div className="w-full flex justify-center min-h-[54px] relative">
+             <div id="telegram-login-container" className="flex justify-center w-full">
+                {/* Fallback button shown if JS is disabled or domain not whitelisted yet */}
+                <button 
+                    onClick={() => {
+                        alert("If the widget is not appearing, please whitelist your domain in @BotFather using /setdomain");
+                        onLogin('telegram');
+                    }}
+                    className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
+                >
+                    <Send className="w-5 h-5" fill="currentColor" />
+                    Continue with Telegram
+                </button>
+             </div>
+          </div>
+          
+          <p className="text-[10px] text-gray-600 text-center mt-2 px-4">
+             Note: You must run <b>/setdomain</b> in @BotFather for your site URL for the button to appear.
+          </p>
         </div>
 
         <div className="text-center">
