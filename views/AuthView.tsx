@@ -78,8 +78,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         const script = document.createElement('script');
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
-        script.setAttribute('data-size', 'large');
-        script.setAttribute('data-radius', '24'); // Match button rounding
+        script.setAttribute('data-size', 'medium'); // Changed to medium to fit better
+        script.setAttribute('data-radius', '12'); 
         script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-userpic', 'false');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
@@ -96,33 +96,33 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-white flex flex-col px-8 py-12 font-sans transition-all duration-500">
+    <div className="min-h-screen bg-[#0B0E14] text-white flex flex-col px-6 py-10 font-sans transition-all duration-500">
       
       {/* Back Button for Signup */}
       {!isLogin && (
         <button 
           onClick={() => setIsLogin(true)}
-          className="mb-8 p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors w-fit"
+          className="mb-6 p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors w-fit"
         >
-          <ArrowLeft size={28} />
+          <ArrowLeft size={24} />
         </button>
       )}
 
       {/* Header Section */}
-      <div className="mb-10">
+      <div className="mb-8">
         {isLogin && (
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 flex items-center justify-center">
-                <NexxLogoBolt />
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 flex items-center justify-center">
+                <NexxLogoBolt className="w-full h-full" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Nexxtrade</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Nexxtrade</h1>
           </div>
         )}
 
-        <h2 className="text-4xl font-bold mb-3">
+        <h2 className="text-3xl font-bold mb-2">
           {isLogin ? 'Welcome back' : 'Create Account'}
         </h2>
-        <p className="text-gray-400 text-lg">
+        <p className="text-gray-400 text-sm">
           {isLogin ? 'Sign in to access your signals' : 'Join Nexxtrade for premium signals'}
         </p>
       </div>
@@ -131,8 +131,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       <form onSubmit={handleManualAuth} className="space-y-4">
         {!isLogin && (
           <div className="relative group">
-            <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
-              <User size={22} />
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+              <User size={20} />
             </div>
             <input 
               type="text" 
@@ -140,14 +140,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               required={!isLogin}
               value={formData.fullName}
               onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-              className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+              className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-xl py-4 pl-12 pr-4 text-white text-sm placeholder:text-gray-500 outline-none transition-all"
             />
           </div>
         )}
 
         <div className="relative group">
-          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
-            <Mail size={22} />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+            <Mail size={20} />
           </div>
           <input 
             type="email" 
@@ -155,13 +155,13 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             required
             value={formData.email}
             onChange={(e) => setFormData({...formData, email: e.target.value})}
-            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-xl py-4 pl-12 pr-4 text-white text-sm placeholder:text-gray-500 outline-none transition-all"
           />
         </div>
 
         <div className="relative group">
-          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
-            <Lock size={22} />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+            <Lock size={20} />
           </div>
           <input 
             type="password" 
@@ -169,63 +169,63 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             required
             value={formData.password}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
-            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-xl py-4 pl-12 pr-4 text-white text-sm placeholder:text-gray-500 outline-none transition-all"
           />
         </div>
 
         <button 
           type="submit"
-          className="w-full bg-brand-green hover:bg-brand-neon text-dark-900 font-bold py-5 rounded-2xl text-xl mt-4 transition-all active:scale-[0.98] shadow-lg shadow-brand-green/10"
+          className="w-full bg-brand-green hover:bg-brand-neon text-dark-900 font-bold py-4 rounded-xl text-base mt-2 transition-all active:scale-[0.98] shadow-lg shadow-brand-green/10"
         >
           {isLogin ? 'Login' : 'Sign Up'}
         </button>
       </form>
 
       {/* OR Divider */}
-      <div className="flex items-center gap-4 my-10">
+      <div className="flex items-center gap-4 my-8">
         <div className="flex-1 h-[1px] bg-gray-700/50"></div>
-        <span className="text-gray-500 text-sm font-bold tracking-widest uppercase">OR</span>
+        <span className="text-gray-500 text-xs font-bold tracking-widest uppercase">OR</span>
         <div className="flex-1 h-[1px] bg-gray-700/50"></div>
       </div>
 
       {/* Social Login Section */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Custom Google Button */}
         <button 
           onClick={() => googleLogin()}
-          className="w-full border border-gray-600 hover:bg-white/5 text-white font-semibold py-5 px-6 rounded-[30px] flex items-center justify-center gap-4 transition-all"
+          className="w-full border border-gray-600 hover:bg-white/5 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-3 transition-all text-sm"
         >
-          <svg className="w-6 h-6" viewBox="0 0 24 24">
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
           </svg>
-          <span className="text-lg">Continue with Google</span>
+          <span>Continue with Google</span>
         </button>
 
         {/* Telegram Widget Wrapper */}
         <div className="w-full relative group">
           {/* We wrap the script in a div that we can style as a button fallback */}
-          <div className="w-full min-h-[72px] border border-gray-600 rounded-[30px] flex items-center justify-center overflow-hidden transition-all hover:bg-[#2AABEE]/5">
+          <div className="w-full min-h-[54px] border border-gray-600 rounded-xl flex items-center justify-center overflow-hidden transition-all hover:bg-[#2AABEE]/5">
              {/* Actual Telegram script injects here */}
-             <div ref={telegramWrapperRef} className="z-10 scale-110" />
+             <div ref={telegramWrapperRef} className="z-10 scale-90" />
              
              {/* Placeholder UI if script takes a second */}
-             <div className="absolute inset-0 flex items-center justify-center gap-4 pointer-events-none group-has-[iframe]:hidden">
-                <div className="bg-[#2AABEE] p-1.5 rounded-full">
-                  <Send size={18} fill="currentColor" />
+             <div className="absolute inset-0 flex items-center justify-center gap-3 pointer-events-none group-has-[iframe]:hidden">
+                <div className="bg-[#2AABEE] p-1 rounded-full">
+                  <Send size={14} fill="currentColor" className="text-white" />
                 </div>
-                <span className="text-lg font-semibold">Continue with Telegram</span>
+                <span className="text-sm font-medium">Continue with Telegram</span>
              </div>
           </div>
         </div>
       </div>
 
       {/* Footer Link */}
-      <div className="mt-auto pt-8 text-center">
+      <div className="mt-auto pt-6 text-center">
         {isLogin ? (
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-400 text-sm">
             Don't have an account? <button 
               onClick={() => setIsLogin(false)}
               className="text-brand-green font-bold hover:text-brand-neon ml-1"
@@ -234,7 +234,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             </button>
           </p>
         ) : (
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-400 text-sm">
             Already have an account? <button 
               onClick={() => setIsLogin(true)}
               className="text-brand-green font-bold hover:text-brand-neon ml-1"
