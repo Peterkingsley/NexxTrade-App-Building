@@ -108,9 +108,9 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
              </div>
           </div>
           
-          <p className="text-[10px] text-gray-600 text-center mt-2 px-4">
+          {/* <p className="text-[10px] text-gray-600 text-center mt-2 px-4">
              Note: You must run <b>/setdomain</b> in @BotFather for your site URL for the button to appear.
-          </p>
+          </p> */}
         </div>
 
         <div className="text-center">
