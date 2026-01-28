@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Copy, Users, DollarSign, Wallet, Check, Gift, QrCode, X, Clock, CheckCircle2, ChevronRight, ExternalLink, FileText, Camera } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { ArrowLeft, Copy, Users, DollarSign, Wallet, Check, Gift, QrCode, X, Clock, CheckCircle2, ChevronRight, ExternalLink, FileText, Camera, Loader2 } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface ReferralsViewProps {
   onBack: () => void;
+  userProfile?: UserProfile | null;
 }
 
 interface WithdrawalRecord {
@@ -19,7 +22,7 @@ interface WithdrawalRecord {
 
 const CHAINS = ['USDT (TRC20)', 'USDT (ERC20)', 'USDT (BEP20)', 'SOL'];
 
-const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
+const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack, userProfile }) => {
   const [copied, setCopied] = useState(false);
   const [copiedHash, setCopiedHash] = useState(false);
   
@@ -34,58 +37,39 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
   const [selectedChain, setSelectedChain] = useState(CHAINS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock Data State
-  const [pendingBalance, setPendingBalance] = useState(150.00);
-  const [totalEarnings, setTotalEarnings] = useState(1250.00);
+  // Data State
+  const [isLoading, setIsLoading] = useState(true);
+  const [pendingBalance, setPendingBalance] = useState(0.00);
+  const [totalEarnings, setTotalEarnings] = useState(0.00);
+  const [totalReferrals, setTotalReferrals] = useState(0);
+  const [referralCode, setReferralCode] = useState('LOADING...');
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>([]);
   
-  const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>([
-    { 
-        id: '1', 
-        amount: 450.00, 
-        date: 'Dec 12, 2023', 
-        status: 'Completed', 
-        chain: 'USDT (TRC20)', 
-        address: 'T9yD...jK2', 
-        txHash: '7f9a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z', 
-        timeRequested: '10:30 AM', 
-        timeSent: '10:45 AM' 
-    },
-    { 
-        id: '2', 
-        amount: 200.00, 
-        date: 'Nov 28, 2023', 
-        status: 'Completed', 
-        chain: 'SOL', 
-        address: 'Hz7A...9sP', 
-        txHash: '5x4w3v2u1t0s9r8q7p6o5n4m3l2k1j0i9h8g7f6e5d4c3b2a1', 
-        timeRequested: '02:15 PM', 
-        timeSent: '02:20 PM' 
-    },
-    { 
-        id: '3', 
-        amount: 1250.00, 
-        date: 'Oct 15, 2023', 
-        status: 'Completed', 
-        chain: 'USDT (ERC20)', 
-        address: '0x71...9A2', 
-        txHash: '0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t', 
-        timeRequested: '09:00 AM', 
-        timeSent: '09:30 AM' 
-    },
-    { 
-        id: '4', 
-        amount: 75.00, 
-        date: 'Sep 01, 2023', 
-        status: 'Completed', 
-        chain: 'USDT (BEP20)', 
-        address: '0xB2...k9L', 
-        txHash: '0x9z8y7x6w5v4u3t2s1r0q9p8o7n6m5l4k3j2i1h0g', 
-        timeRequested: '04:45 PM', 
-        timeSent: '05:00 PM' 
-    },
-  ]);
-  
-  const referralLink = 'https://nexxtrade.com/ref/nexx_elite_99';
+  const referralLink = `https://nexxtrade.com/ref/${referralCode}`;
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+      setIsLoading(true);
+      try {
+          // Fetch Stats
+          const statsRes = await axios.get('/api/referrals/my-stats');
+          setPendingBalance(Number(statsRes.data.pendingBalance));
+          setTotalEarnings(Number(statsRes.data.totalEarnings));
+          setTotalReferrals(statsRes.data.totalReferrals);
+          setReferralCode(statsRes.data.referralCode || 'NEXX-ELITE');
+
+          // Fetch History
+          const historyRes = await axios.get('/api/withdrawals');
+          setWithdrawals(historyRes.data);
+      } catch (error) {
+          console.error("Failed to load referral data", error);
+      } finally {
+          setIsLoading(false);
+      }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink);
@@ -108,31 +92,30 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
       }, 2000);
   };
 
-  const handleWithdrawSubmit = () => {
+  const handleWithdrawSubmit = async () => {
       if (!walletAddress || pendingBalance <= 0) return;
 
       setIsSubmitting(true);
       
-      // Simulate API call
-      setTimeout(() => {
-          const now = new Date();
-          const newWithdrawal: WithdrawalRecord = {
-              id: Math.random().toString(36).substr(2, 9),
+      try {
+          const response = await axios.post('/api/withdrawals', {
               amount: pendingBalance,
-              date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-              status: 'Pending',
-              chain: selectedChain,
-              address: walletAddress.substring(0, 6) + '...' + walletAddress.substring(walletAddress.length - 4),
-              timeRequested: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              // No txHash or timeSent for pending
-          };
+              network: selectedChain,
+              address: walletAddress
+          });
 
-          setWithdrawals([newWithdrawal, ...withdrawals]);
-          setPendingBalance(0);
-          setIsSubmitting(false);
+          // Add new withdrawal to list and reset balance
+          setWithdrawals([response.data, ...withdrawals]);
+          setPendingBalance(0); // Assumes we withdrew everything
           setShowWithdrawModal(false);
           setWalletAddress('');
-      }, 1500);
+          alert('Withdrawal request submitted successfully!');
+      } catch (error) {
+          console.error("Withdrawal failed", error);
+          alert("Failed to submit withdrawal request.");
+      } finally {
+          setIsSubmitting(false);
+      }
   };
 
   const renderWithdrawalItem = (item: WithdrawalRecord, isLast: boolean) => (
@@ -148,7 +131,7 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
             <div>
                 <div className="flex items-center gap-2">
                     <h4 className="text-white font-bold text-sm">{item.chain}</h4>
-                    <span className="text-xs text-gray-500 font-mono">({item.address})</span>
+                    <span className="text-xs text-gray-500 font-mono">({item.address.substring(0, 6)}...{item.address.substring(item.address.length - 4)})</span>
                 </div>
                 <p className="text-gray-500 text-xs">{item.date} • {item.timeRequested}</p>
             </div>
@@ -177,8 +160,7 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
             </div>
             <div className="p-4">
                 <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden">
-                    {withdrawals.map((item, idx) => renderWithdrawalItem(item, idx === withdrawals.length - 1))}
-                    {withdrawals.length === 0 && (
+                    {withdrawals.length > 0 ? withdrawals.map((item, idx) => renderWithdrawalItem(item, idx === withdrawals.length - 1)) : (
                         <div className="p-8 text-center text-gray-500 text-sm">No transaction history found.</div>
                     )}
                 </div>
@@ -209,7 +191,9 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
               <p className="text-emerald-100 text-sm font-medium mb-1 flex items-center gap-2">
                 <DollarSign size={16} /> Total Earnings
               </p>
-              <h2 className="text-4xl font-bold text-white mb-4">${totalEarnings.toFixed(2)}</h2>
+              <h2 className="text-4xl font-bold text-white mb-4">
+                  {isLoading ? <Loader2 className="animate-spin" /> : `$${totalEarnings.toFixed(2)}`}
+              </h2>
               <div className="flex items-center gap-2 bg-black/20 backdrop-blur-sm px-3 py-1.5 rounded-lg w-fit">
                   <span className="text-xs text-white/90">Lifetime commission earned</span>
               </div>
@@ -224,7 +208,9 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
                 </div>
                 <div>
                     <p className="text-gray-400 text-xs mb-1">Pending Balance</p>
-                    <h3 className="text-xl font-bold text-white">${pendingBalance.toFixed(2)}</h3>
+                    <h3 className="text-xl font-bold text-white">
+                        {isLoading ? '...' : `$${pendingBalance.toFixed(2)}`}
+                    </h3>
                 </div>
             </div>
             <div className="bg-dark-800 p-4 rounded-2xl border border-dark-700 flex flex-col justify-between">
@@ -233,7 +219,9 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
                 </div>
                 <div>
                     <p className="text-gray-400 text-xs mb-1">Total Referrals</p>
-                    <h3 className="text-xl font-bold text-white">24</h3>
+                    <h3 className="text-xl font-bold text-white">
+                         {isLoading ? '...' : totalReferrals}
+                    </h3>
                 </div>
             </div>
         </div>
@@ -260,7 +248,7 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
         {/* CTA */}
         <button 
             onClick={() => setShowWithdrawModal(true)}
-            disabled={pendingBalance <= 0}
+            disabled={pendingBalance <= 0 || isLoading}
             className={`w-full font-bold py-4 rounded-xl transition shadow-lg ${pendingBalance > 0 ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20' : 'bg-dark-700 text-gray-500 cursor-not-allowed'}`}
         >
             {pendingBalance > 0 ? 'Withdraw Funds' : 'No Funds to Withdraw'}
@@ -283,12 +271,12 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
                  )}
              </div>
              <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden">
-                 {withdrawals.length > 0 ? (
+                 {isLoading ? (
+                     <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-gray-500" /></div>
+                 ) : withdrawals.length > 0 ? (
                     <>
                         {withdrawals.slice(0, 2).map((item, idx) => renderWithdrawalItem(item, idx === 1 && withdrawals.length <= 2))}
                         
-                        {/* "See More" Button inside list if needed, currently using "See All" header button logic above, 
-                            but can also add a bottom button style: */}
                         {withdrawals.length > 2 && (
                             <button 
                                 onClick={() => setShowHistoryView(true)}
@@ -403,7 +391,12 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack }) => {
                             : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'
                         }`}
                     >
-                        {isSubmitting ? 'Processing...' : 'Confirm Withdrawal'}
+                        {isSubmitting ? (
+                            <div className="flex items-center justify-center gap-2">
+                                <Loader2 className="animate-spin" size={18} />
+                                Processing...
+                            </div>
+                        ) : 'Confirm Withdrawal'}
                     </button>
                 </div>
             </div>

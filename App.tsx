@@ -279,7 +279,7 @@ const App: React.FC = () => {
       case 'subscription':
         return <SubscriptionView onBack={handleBack} />;
       case 'referrals':
-        return <ReferralsView onBack={handleBack} />;
+        return <ReferralsView onBack={handleBack} userProfile={userProfile} />;
       default:
         return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} />;
     }
