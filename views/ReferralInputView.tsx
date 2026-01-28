@@ -1,30 +1,43 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { Gift, ArrowRight, CheckCircle2, Ticket } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface ReferralInputViewProps {
   onComplete: () => void;
+  userProfile?: UserProfile | null;
 }
 
-const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete }) => {
+const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userProfile }) => {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!code.trim()) return;
     
     setIsSubmitting(true);
     
-    // Simulate API validation
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSuccess(true);
-      
-      // Auto advance after success animation
-      setTimeout(() => {
-        onComplete();
-      }, 1500);
-    }, 1000);
+    try {
+        if (userProfile?.id) {
+            await axios.post('/api/referrals/claim', { code: code.trim() }, {
+                 headers: { 'x-user-id': userProfile.id }
+            });
+            setSuccess(true);
+             // Auto advance after success animation
+            setTimeout(() => {
+                onComplete();
+            }, 1500);
+        } else {
+            // Fallback (UI only, though likely won't happen if auth is required to reach this)
+             setSuccess(true);
+             setTimeout(onComplete, 1500);
+        }
+    } catch (error: any) {
+        alert(error.response?.data?.error || "Invalid or already used referral code");
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   return (

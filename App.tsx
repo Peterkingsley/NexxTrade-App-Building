@@ -248,7 +248,7 @@ const App: React.FC = () => {
   }
 
   if (currentView === 'referral-input') {
-      return <ReferralInputView onComplete={handleReferralComplete} />;
+      return <ReferralInputView onComplete={handleReferralComplete} userProfile={userProfile} />;
   }
 
   // Views that share the dashboard layout

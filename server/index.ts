@@ -312,6 +312,45 @@ app.post('/api/user/link-account', async (req, res) => {
     }
 });
 
+// Claim Referral Code Endpoint
+app.post('/api/referrals/claim', async (req, res) => {
+    const userId = getUserId(req);
+    const { code } = req.body;
+    
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!code) return res.status(400).json({ error: 'Code required' });
+
+    try {
+        // Find referrer
+        const referrerRes = await query('SELECT id FROM users WHERE referral_code = $1', [code]);
+        if (referrerRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Invalid referral code' });
+        }
+        
+        const referrerId = referrerRes.rows[0].id;
+
+        // Prevent self-referral
+        if (referrerId === userId) {
+            return res.status(400).json({ error: 'Cannot refer yourself' });
+        }
+
+        // Check if already referred
+        const userRes = await query('SELECT referred_by FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length > 0 && userRes.rows[0].referred_by) {
+            return res.status(400).json({ error: 'Already referred' });
+        }
+
+        // Update user
+        await query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
+        
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error('Referral Claim Error:', error);
+        res.status(500).json({ error: 'Failed to claim referral' });
+    }
+});
+
 app.get('/api/signals', async (req, res) => {
   try {
     const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'signals')");
