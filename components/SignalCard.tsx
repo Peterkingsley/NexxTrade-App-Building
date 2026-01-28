@@ -25,15 +25,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   if (livePrice && !isLocked && signal.status === 'active' && signal.entry !== 'Locked') {
       const entryPrice = parseFloat(signal.entry.replace(/,/g, ''));
       if (!isNaN(entryPrice) && entryPrice > 0) {
-          // Calculate percentage difference
-          const diff = ((livePrice - entryPrice) / entryPrice) * 100;
-          // Invert if Short (assuming typical Futures signals where we might infer direction, 
-          // usually signals imply Long unless specified. For this demo, let's assume Long for positive logic or parse PnL)
-          // Since mock data has static PnL, we can use that to infer direction? 
-          // Simplification: Assume Long for now, or use static PnL direction
-          
-          // Better logic: If static PnL is negative, assume Short? No, that just means losing trade.
-          // Let's assume standard Longs for simplicity unless we add 'side' to Signal type.
+          // Calculate percentage difference based on side
+          let diff = 0;
+          if (signal.side === 'Short') {
+             diff = ((entryPrice - livePrice) / entryPrice) * 100;
+          } else {
+             diff = ((livePrice - entryPrice) / entryPrice) * 100;
+          }
           livePnl = diff;
       }
   }
@@ -55,6 +53,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       
       return () => clearTimeout(timer);
   }, [livePrice]);
+
+  // Price formatting helper
+  const formatPrice = (price: number) => {
+      if (price < 1) return price.toFixed(4);
+      if (price < 1000) return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+      return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   const handleAnalysisClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -153,11 +158,11 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">{signal.pair}</h3>
             <div className="flex gap-1.5 mt-0.5 sm:mt-0">
-                <span className="bg-purple-500/20 text-purple-300 text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border border-purple-500/10">
-                {signal.type}
+                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-red-500/10 text-red-400 border-red-500/10'}`}>
+                    {signal.side}
                 </span>
                 <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-gray-700/50 text-gray-400 border-gray-600/30'}`}>
-                {signal.status}
+                    {signal.status}
                 </span>
             </div>
           </div>
@@ -169,7 +174,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
              {/* Live Price Display */}
              {livePrice && (
                  <div className={`flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-300 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
-                     {livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                     {formatPrice(livePrice)}
                      {priceDirection === 'up' && <TrendingUp size={10} />}
                      {priceDirection === 'down' && <TrendingDown size={10} />}
                  </div>
@@ -335,76 +340,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         </div>
       )}
 
-      {/* Upgrade / Unlock Modal */}
-      {showUpgradeModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)}></div>
-             <div className="bg-dark-800 w-full max-w-sm rounded-3xl overflow-hidden border border-dark-700 shadow-2xl relative animate-in zoom-in-95 duration-200">
-                
-                <div className="bg-gradient-to-b from-brand-green/20 to-dark-800 p-8 text-center relative overflow-hidden">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-brand-green/30 blur-3xl rounded-full"></div>
-                    
-                    <div className="w-16 h-16 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg relative z-10">
-                        <Crown size={32} className="text-white" fill="currentColor" />
-                    </div>
-                    
-                    <h3 className="text-2xl font-bold text-white mb-2 relative z-10">Unlock Pro Access</h3>
-                    <p className="text-gray-300 text-sm leading-relaxed relative z-10">
-                        This high-probability signal is available on the <span className="text-brand-green font-bold">Pro</span> package.
-                    </p>
-                </div>
-
-                <div className="p-6 bg-dark-800">
-                    <div className="flex gap-2 mb-6">
-                        {/* Basic Package */}
-                        <div className="flex-1 bg-dark-900/50 p-3 rounded-xl border border-dark-700 flex flex-col items-center gap-2 opacity-50 grayscale">
-                            <span className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Basic</span>
-                            <Lock size={16} className="text-gray-500" />
-                        </div>
-
-                        {/* Pro Package - Active */}
-                        <div className="flex-1 bg-brand-green/10 p-3 rounded-xl border border-brand-green flex flex-col items-center gap-2 relative shadow-[0_0_15px_rgba(16,185,129,0.2)] transform scale-105">
-                            <div className="absolute -top-2 bg-brand-green text-dark-900 text-[8px] font-bold px-2 py-0.5 rounded-full">RECOMMENDED</div>
-                            <span className="text-[10px] font-bold uppercase text-brand-green tracking-wider mt-1">Pro</span>
-                            <Check size={16} className="text-brand-green" strokeWidth={3} />
-                        </div>
-
-                        {/* Elite Package */}
-                        <div className="flex-1 bg-purple-500/10 p-3 rounded-xl border border-purple-500/30 flex flex-col items-center gap-2">
-                             <span className="text-[10px] font-bold uppercase text-purple-400 tracking-wider">Elite</span>
-                             <Check size={16} className="text-purple-400" strokeWidth={3} />
-                        </div>
-                    </div>
-
-                    <div className="space-y-3 mb-6">
-                        <div className="flex items-center gap-3 text-sm text-gray-300">
-                            <Zap size={16} className="text-brand-green shrink-0" />
-                            <span>Instant Entry & Stop Loss reveal</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm text-gray-300">
-                            <BrainCircuit size={16} className="text-brand-green shrink-0" />
-                            <span>Detailed trade analysis</span>
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={() => setShowUpgradeModal(false)}
-                        className="w-full bg-gradient-to-r from-brand-green to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-900/20 transition-all transform hover:scale-[1.02]"
-                    >
-                        Get Access
-                    </button>
-                    
-                    <button 
-                        onClick={() => setShowUpgradeModal(false)}
-                        className="w-full text-center text-gray-500 text-xs font-medium mt-4 hover:text-white transition"
-                    >
-                        Maybe Later
-                    </button>
-                </div>
-             </div>
-        </div>
-      )}
-
       {/* Share PnL Card Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center px-4">
@@ -453,8 +388,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                         <div className="my-6">
                             <div className="flex items-center gap-3 mb-2">
                                 <h1 className="text-3xl font-bold">{signal.pair}</h1>
-                                <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${signal.pnl >= 0 ? 'bg-emerald-900/40 text-emerald-100' : 'bg-red-900/40 text-red-100'} border border-white/10`}>
-                                    {signal.pnl >= 0 ? 'Long' : 'Short'} 
+                                <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${signal.side === 'Long' ? 'bg-emerald-900/40 text-emerald-100' : 'bg-red-900/40 text-red-100'} border border-white/10`}>
+                                    {signal.side}
                                 </span>
                             </div>
                             <div className="flex items-baseline gap-1">

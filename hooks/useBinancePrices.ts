@@ -3,52 +3,70 @@ import { useState, useEffect, useRef } from 'react';
 export const useBinancePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeout = useRef<any>(null);
 
   useEffect(() => {
     // 1. Format pairs for Binance stream (e.g., "BTC/USDT" -> "btcusdt")
     // Filter out pairs that are "Locked" or invalid
     const formattedPairs = pairs
-      .map((p) => p.toLowerCase().replace('/', ''))
+      .map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, ''))
       .filter((p) => p && !p.includes('locked'));
 
     if (formattedPairs.length === 0) return;
 
-    // 2. Construct Stream URL
-    // Format: wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade
-    const streams = formattedPairs.map((p) => `${p}@trade`).join('/');
-    const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+    const connect = () => {
+        // Use aggTrade for real-time trade data
+        const streams = formattedPairs.map((p) => `${p}@aggTrade`).join('/');
+        const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
-    // 3. Connect
-    wsRef.current = new WebSocket(wsUrl);
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-    wsRef.current.onopen = () => {
-      console.log('Connected to Binance Live Prices');
+        ws.onopen = () => {
+          console.log('Connected to Binance Live Prices');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+              const message = JSON.parse(event.data);
+              // aggTrade format: { stream: "btcusdt@aggTrade", data: { s: "BTCUSDT", p: "123.45", ... } }
+              if (message.data && message.data.s && message.data.p) {
+                const symbol = message.data.s; 
+                const price = parseFloat(message.data.p);
+
+                setPrices((prev) => {
+                     // Simple optimization to avoid rerenders if price is identical (unlikely with floats but good practice)
+                     if (prev[symbol] === price) return prev;
+                     return { ...prev, [symbol]: price };
+                });
+              }
+          } catch (e) {
+              // Ignore parse errors
+          }
+        };
+
+        ws.onclose = () => {
+            console.log('Binance WS disconnected. Reconnecting...');
+            reconnectTimeout.current = setTimeout(connect, 3000);
+        };
+
+        ws.onerror = (err) => {
+            console.error('Binance WS Error:', err);
+            ws.close();
+        };
     };
 
-    wsRef.current.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      // message.data.s is the symbol (e.g., BTCUSDT)
-      // message.data.p is the price string
-      if (message.data && message.data.s && message.data.p) {
-        const symbol = message.data.s; // e.g. "BTCUSDT"
-        const price = parseFloat(message.data.p);
-
-        // Map back to our format "BTC/USDT" implies checking how we stored keys
-        // To make it easy, we store keys as "BTCUSDT" (uppercase, no slash)
-        // The UI will have to strip the slash from its pair to look this up.
-        setPrices((prev) => ({
-          ...prev,
-          [symbol]: price,
-        }));
-      }
-    };
+    connect();
 
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
       }
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+      }
     };
-  }, [JSON.stringify(pairs)]); // Re-connect if pairs change
+  }, [JSON.stringify(pairs)]); 
 
   return prices;
 };

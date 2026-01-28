@@ -16,6 +16,7 @@ export interface Signal {
   id: string;
   pair: string;
   type: 'Futures' | 'Spot';
+  side: 'Long' | 'Short';
   status: 'active' | 'closed';
   pnl: number;
   timeAgo: string;
