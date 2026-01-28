@@ -389,8 +389,8 @@ if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
 
     // Handle React routing, return all requests to React app
-    // Express 5 regex syntax update: use (.*) instead of *
-    app.get('(.*)', (req, res) => {
+    // Use Regex /.*/ to match all routes, avoiding Express 5 string path syntax issues
+    app.get(/.*/, (req, res) => {
         // Only serve index.html for non-API routes
         if (!req.path.startsWith('/api')) {
              res.sendFile(path.join(distPath, 'index.html'));
@@ -400,7 +400,7 @@ if (fs.existsSync(distPath)) {
     });
 } else {
     console.error('CRITICAL: dist directory not found! Ensure `npm run build` ran successfully.');
-    app.get('(.*)', (req, res) => {
+    app.get(/.*/, (req, res) => {
         res.status(500).send('Server Error: Frontend build not found.');
     });
 }
