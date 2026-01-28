@@ -49,20 +49,30 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack, userProfile }) =>
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [userProfile]); // Reload if profile changes
 
   const fetchData = async () => {
       setIsLoading(true);
       try {
+          if (!userProfile?.id) {
+              // If no user ID, we can't fetch real stats.
+              // Just allow default state or mock empty
+              setReferralCode('LOGIN-REQUIRED');
+              setIsLoading(false);
+              return;
+          }
+
+          const headers = { 'x-user-id': userProfile.id };
+
           // Fetch Stats
-          const statsRes = await axios.get('/api/referrals/my-stats');
+          const statsRes = await axios.get('/api/referrals/my-stats', { headers });
           setPendingBalance(Number(statsRes.data.pendingBalance));
           setTotalEarnings(Number(statsRes.data.totalEarnings));
           setTotalReferrals(statsRes.data.totalReferrals);
           setReferralCode(statsRes.data.referralCode || 'NEXX-ELITE');
 
           // Fetch History
-          const historyRes = await axios.get('/api/withdrawals');
+          const historyRes = await axios.get('/api/withdrawals', { headers });
           setWithdrawals(historyRes.data);
       } catch (error) {
           console.error("Failed to load referral data", error);
@@ -93,7 +103,7 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack, userProfile }) =>
   };
 
   const handleWithdrawSubmit = async () => {
-      if (!walletAddress || pendingBalance <= 0) return;
+      if (!walletAddress || pendingBalance <= 0 || !userProfile?.id) return;
 
       setIsSubmitting(true);
       
@@ -102,6 +112,8 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack, userProfile }) =>
               amount: pendingBalance,
               network: selectedChain,
               address: walletAddress
+          }, {
+              headers: { 'x-user-id': userProfile.id }
           });
 
           // Add new withdrawal to list and reset balance

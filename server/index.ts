@@ -2,43 +2,122 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { query } from './db';
+import crypto from 'crypto';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS to allow requests from the frontend (usually port 3000 or 5173)
+// Enable CORS to allow requests from the frontend
 app.use(cors());
 app.use(express.json());
 
-// Helper to get a demo user ID for testing since we don't have full auth sync yet
-const getDemoUserId = async () => {
-    const res = await query('SELECT id FROM users LIMIT 1');
-    if (res.rows.length > 0) return res.rows[0].id;
-    
-    // Create one if not exists
-    const newRes = await query(`
-        INSERT INTO users (email, full_name, username, wallet_balance, referral_code)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-    `, ['demo@nexxtrade.com', 'Demo User', 'nexx_demo', 150.00, 'NEXX-DEMO']);
-    return newRes.rows[0].id;
+// Helper: Generate a random referral code
+const generateReferralCode = () => {
+    return 'NEXX-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+};
+
+// Middleware helper to get User ID from headers (Simple Auth)
+const getUserId = (req: express.Request): string | null => {
+    const userId = req.headers['x-user-id'];
+    return typeof userId === 'string' ? userId : null;
 };
 
 // --- API Routes ---
 
+// POST /api/auth/login - Handle Sign Up / Login for Google, Telegram, Email
+app.post('/api/auth/login', async (req, res) => {
+    const { provider, email, firstName, lastName, username, photoUrl, providerId } = req.body;
+
+    try {
+        if (!email && !username) {
+            return res.status(400).json({ error: 'Email or Username required' });
+        }
+
+        // 1. Check if user exists by Email (for Google/Email) or Username (Telegram)
+        // We prioritize email for uniqueness
+        let userRes;
+        
+        if (email) {
+            userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
+        } else {
+            // Telegram might not provide email, use username match or provider link
+            // First check linked accounts to find user_id
+            const linkRes = await query('SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2', [provider, providerId]);
+            if (linkRes.rows.length > 0) {
+                userRes = await query('SELECT * FROM users WHERE id = $1', [linkRes.rows[0].user_id]);
+            } else {
+                // Fallback to username check
+                 userRes = await query('SELECT * FROM users WHERE username = $1', [username]);
+            }
+        }
+
+        let userId;
+        let isNewUser = false;
+        let userData;
+
+        if (userRes && userRes.rows.length > 0) {
+            // --- EXISTING USER ---
+            userId = userRes.rows[0].id;
+            userData = userRes.rows[0];
+            
+            // Update latest info if provided
+            await query('UPDATE users SET full_name = COALESCE($1, full_name), photo_url = COALESCE($2, photo_url), updated_at = NOW() WHERE id = $3', 
+                [`${firstName} ${lastName || ''}`.trim(), photoUrl, userId]);
+        } else {
+            // --- NEW USER ---
+            isNewUser = true;
+            const refCode = generateReferralCode();
+            const fullName = `${firstName} ${lastName || ''}`.trim();
+            
+            // Handle cases where email might be missing (Telegram sometimes)
+            // If email is missing, generate a dummy one based on provider ID to satisfy NOT NULL constraint
+            const finalEmail = email || `${providerId}@telegram.nexxtrade.com`;
+
+            const insertRes = await query(`
+                INSERT INTO users (email, full_name, username, photo_url, referral_code, wallet_balance, is_email_verified)
+                VALUES ($1, $2, $3, $4, $5, 0.00, $6)
+                RETURNING *
+            `, [finalEmail, fullName, username || `user_${crypto.randomBytes(4).toString('hex')}`, photoUrl, refCode, provider === 'google']);
+            
+            userId = insertRes.rows[0].id;
+            userData = insertRes.rows[0];
+        }
+
+        // 2. Link Account (Idempotent)
+        if (providerId) {
+            await query(`
+                INSERT INTO linked_accounts (user_id, provider, provider_user_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (provider, provider_user_id) DO NOTHING
+            `, [userId, provider, providerId.toString()]);
+        }
+
+        // Return the user profile
+        res.json({
+            id: userData.id,
+            firstName: firstName,
+            lastName: lastName,
+            username: userData.username,
+            photoUrl: userData.photo_url,
+            referralCode: userData.referral_code,
+            isNewUser
+        });
+
+    } catch (error) {
+        console.error('Auth Error:', error);
+        res.status(500).json({ error: 'Authentication failed' });
+    }
+});
+
+
 // GET /api/signals - Fetch all signals with their targets
 app.get('/api/signals', async (req, res) => {
   try {
-    // We use a subquery to fetch targets as a JSON array for each signal
     const result = await query(`
       SELECT 
-        s.id, 
-        s.pair, 
-        s.type, 
-        s.side, 
-        s.status, 
+        s.id, s.pair, s.type, s.side, s.status, 
         s.pnl_percentage as pnl,
         s.entry_price_display as entry,
         s.stop_loss_price as "stopLoss",
@@ -48,19 +127,14 @@ app.get('/api/signals', async (req, res) => {
         s.created_at,
         s.closed_at as "closedAt",
         COALESCE(
-          (
-            SELECT json_agg(json_build_object('price', st.target_price, 'hit', st.is_hit) ORDER BY st.target_order)
-            FROM signal_targets st
-            WHERE st.signal_id = s.id
-          ),
-          '[]'::json
+          (SELECT json_agg(json_build_object('price', st.target_price, 'hit', st.is_hit) ORDER BY st.target_order)
+           FROM signal_targets st WHERE st.signal_id = s.id), '[]'::json
         ) as "tpTargets"
       FROM signals s
       ORDER BY s.created_at DESC
     `);
 
     const signals = result.rows.map(row => {
-      // Calculate timeAgo helper
       const diffMs = new Date().getTime() - new Date(row.created_at).getTime();
       const diffMins = Math.round(diffMs / 60000);
       const diffHours = Math.round(diffMs / 3600000);
@@ -73,7 +147,7 @@ app.get('/api/signals', async (req, res) => {
 
       return {
         ...row,
-        pnl: Number(row.pnl), // Ensure number type
+        pnl: Number(row.pnl),
         tpTargets: row.tpTargets,
         timeAgo
       };
@@ -82,24 +156,25 @@ app.get('/api/signals', async (req, res) => {
     res.json(signals);
   } catch (error) {
     console.error('Error fetching signals:', error);
-    res.status(500).json({ error: 'Failed to fetch signals from database' });
+    res.status(500).json({ error: 'Failed to fetch signals' });
   }
 });
 
-// --- Referral & Withdrawal Routes ---
+// --- Referral & Withdrawal Routes (Updated to use Real User) ---
 
 // GET /api/referrals/my-stats
 app.get('/api/referrals/my-stats', async (req, res) => {
     try {
-        // In a real app, req.user.id from middleware. Here, use demo user.
-        const userId = await getDemoUserId();
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         
-        // Parallel queries
         const [userRes, refRes, withdrawRes] = await Promise.all([
             query('SELECT wallet_balance, referral_code FROM users WHERE id = $1', [userId]),
             query('SELECT COUNT(*) as count FROM users WHERE referred_by = $1', [userId]),
             query('SELECT COALESCE(SUM(amount), 0) as total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = $2', [userId, 'Completed'])
         ]);
+
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const user = userRes.rows[0];
         const referralCount = parseInt(refRes.rows[0].count);
@@ -122,10 +197,11 @@ app.get('/api/referrals/my-stats', async (req, res) => {
 // GET /api/withdrawals
 app.get('/api/withdrawals', async (req, res) => {
     try {
-        const userId = await getDemoUserId();
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
         const result = await query('SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY requested_at DESC', [userId]);
         
-        // Map DB columns to frontend interface
         const withdrawals = result.rows.map(row => ({
             id: row.id,
             amount: parseFloat(row.amount),
@@ -149,29 +225,25 @@ app.get('/api/withdrawals', async (req, res) => {
 app.post('/api/withdrawals', async (req, res) => {
     const { amount, network, address } = req.body;
     try {
-        const userId = await getDemoUserId();
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         
-        // Check balance
         const userRes = await query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
         const currentBalance = parseFloat(userRes.rows[0].wallet_balance);
         
         if (currentBalance < amount) {
             return res.status(400).json({ error: 'Insufficient balance' });
         }
 
-        // Transaction start
         await query('BEGIN');
-        
-        // Deduct balance
         await query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [amount, userId]);
-        
-        // Insert withdrawal
         const insertRes = await query(`
             INSERT INTO withdrawals (user_id, amount, network, wallet_address, status)
             VALUES ($1, $2, $3, $4, 'Pending')
             RETURNING *
         `, [userId, amount, network, address]);
-        
         await query('COMMIT');
         
         const row = insertRes.rows[0];

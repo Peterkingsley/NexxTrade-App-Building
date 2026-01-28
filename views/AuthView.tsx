@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
-import { Mail, Lock, User, ArrowLeft, Send } from 'lucide-react';
+import { Mail, Lock, User, ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
@@ -28,76 +28,133 @@ const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
 
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Initialize Google Login
+  // --- Backend Sync Helper ---
+  const authenticateWithBackend = async (provider: AuthProvider, rawData: any) => {
+      setIsLoading(true);
+      try {
+          // Map incoming data to our API structure
+          const payload = {
+              provider,
+              email: rawData.email,
+              firstName: rawData.firstName,
+              lastName: rawData.lastName,
+              username: rawData.username,
+              photoUrl: rawData.photoUrl,
+              providerId: rawData.id
+          };
+
+          const response = await axios.post('/api/auth/login', payload);
+          const dbUser = response.data; // The user object returned from DB (has id, etc.)
+
+          // Create standard profile object
+          const profile: UserProfile = {
+            id: dbUser.id,
+            firstName: dbUser.firstName,
+            lastName: dbUser.lastName,
+            username: dbUser.username,
+            photoUrl: dbUser.photoUrl
+          };
+          
+          onLogin(provider, profile);
+
+      } catch (error) {
+          console.error('Backend Authentication Failed:', error);
+          alert('Failed to connect to server. Please try again.');
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+
+  // --- Google Login ---
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
+      setIsLoading(true);
       try {
+        // 1. Get Google User Details
         const userInfo = await axios.get(
           'https://www.googleapis.com/oauth2/v3/userinfo',
-          {
-            headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-          }
+          { headers: { Authorization: `Bearer ${tokenResponse.access_token}` } }
         );
 
-        const profile: UserProfile = {
-          id: userInfo.data.sub,
-          firstName: userInfo.data.given_name,
-          lastName: userInfo.data.family_name,
-          username: userInfo.data.email?.split('@')[0],
-          photoUrl: userInfo.data.picture,
-        };
+        // 2. Sync with Backend
+        await authenticateWithBackend('google', {
+            id: userInfo.data.sub,
+            email: userInfo.data.email,
+            firstName: userInfo.data.given_name,
+            lastName: userInfo.data.family_name,
+            username: userInfo.data.email?.split('@')[0],
+            photoUrl: userInfo.data.picture
+        });
 
-        onLogin('google', profile);
       } catch (error) {
-        console.error('Failed to fetch user info:', error);
+        console.error('Google Auth Failed:', error);
+        setIsLoading(false);
       }
     },
     onError: errorResponse => console.log('Google Login Failed:', errorResponse),
   });
 
+  // --- Telegram Login ---
   useEffect(() => {
-    // 1. Define the callback function that Telegram calls upon successful login
-    (window as any).onTelegramAuth = (user: any) => {
-      const userData: UserProfile = {
-        id: user.id.toString(),
-        firstName: user.first_name,
-        lastName: user.last_name,
-        username: user.username,
-        photoUrl: user.photo_url 
-      };
-      onLogin('telegram', userData);
+    (window as any).onTelegramAuth = async (user: any) => {
+      // Telegram widget returns user object directly
+      await authenticateWithBackend('telegram', {
+          id: user.id.toString(),
+          firstName: user.first_name,
+          lastName: user.last_name,
+          username: user.username,
+          photoUrl: user.photo_url
+          // Note: Telegram login often does not return email permissions by default
+      });
     };
 
-    // 2. Inject the Telegram script
     if (telegramWrapperRef.current) {
         telegramWrapperRef.current.innerHTML = ''; 
-        
         const script = document.createElement('script');
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
-        script.setAttribute('data-size', 'medium'); // Changed to medium to fit better
+        script.setAttribute('data-size', 'medium');
         script.setAttribute('data-radius', '12'); 
         script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-userpic', 'false');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
         script.async = true;
-
         telegramWrapperRef.current.appendChild(script);
     }
-  }, [onLogin, isLogin]); // Re-inject on view toggle to ensure widget shows
+  }, [isLogin]); 
 
-  const handleManualAuth = (e: React.FormEvent) => {
+  // --- Manual Email/Pass Login ---
+  const handleManualAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate manual auth with Google provider context for demo
-    onLogin('google', { firstName: formData.fullName || 'New', username: formData.email.split('@')[0] });
+    if (!formData.email || !formData.password) return;
+    
+    // For demo purposes, we will treat this as an 'email' provider login
+    // In a real app, you'd send password to verify hash. Here we just create/fetch user by email.
+    await authenticateWithBackend('google', { // Using 'google' as generic provider alias for simplicity or add 'email'
+        id: `email_${formData.email}`,
+        email: formData.email,
+        firstName: formData.fullName || 'User',
+        lastName: '',
+        username: formData.email.split('@')[0],
+        photoUrl: undefined
+    });
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-white flex flex-col px-6 py-10 font-sans transition-all duration-500">
+    <div className="min-h-screen bg-[#0B0E14] text-white flex flex-col px-6 py-10 font-sans transition-all duration-500 relative">
       
+      {isLoading && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center flex-col gap-3">
+              <Loader2 className="w-10 h-10 text-brand-green animate-spin" />
+              <p className="text-brand-green font-bold text-sm">Authenticating...</p>
+          </div>
+      )}
+
       {/* Back Button for Signup */}
       {!isLogin && (
         <button 
@@ -175,7 +232,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
         <button 
           type="submit"
-          className="w-full bg-brand-green hover:bg-brand-neon text-dark-900 font-bold py-4 rounded-xl text-base mt-2 transition-all active:scale-[0.98] shadow-lg shadow-brand-green/10"
+          disabled={isLoading}
+          className="w-full bg-brand-green hover:bg-brand-neon text-dark-900 font-bold py-4 rounded-xl text-base mt-2 transition-all active:scale-[0.98] shadow-lg shadow-brand-green/10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLogin ? 'Login' : 'Sign Up'}
         </button>
@@ -193,7 +251,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         {/* Custom Google Button */}
         <button 
           onClick={() => googleLogin()}
-          className="w-full border border-gray-600 hover:bg-white/5 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-3 transition-all text-sm"
+          disabled={isLoading}
+          className="w-full border border-gray-600 hover:bg-white/5 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-3 transition-all text-sm disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
