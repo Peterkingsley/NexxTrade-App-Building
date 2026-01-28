@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
+import { Mail, Lock, User, ArrowLeft, Send } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
@@ -10,15 +11,30 @@ interface AuthViewProps {
 // Bot username provided
 const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 
+// Custom NexxTrade Logo Bolt Icon from Screenshot
+const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
+  <svg 
+    width="48" 
+    height="48" 
+    viewBox="0 0 48 48" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path d="M14 10L32 10L24 22L30 22L16 38L22 26L16 26L14 10Z" fill="#10B981" stroke="#10B981" strokeWidth="2" strokeLinejoin="round"/>
+    <path d="M26 8L10 32L18 32L14 44L34 16L24 16L30 8L26 8Z" fill="#10B981" />
+  </svg>
+);
+
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
   // Initialize Google Login
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        // Fetch user details from Google API using the access token
         const userInfo = await axios.get(
           'https://www.googleapis.com/oauth2/v3/userinfo',
           {
@@ -30,7 +46,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           id: userInfo.data.sub,
           firstName: userInfo.data.given_name,
           lastName: userInfo.data.family_name,
-          username: userInfo.data.email?.split('@')[0], // Use email prefix as fallback username
+          username: userInfo.data.email?.split('@')[0],
           photoUrl: userInfo.data.picture,
         };
 
@@ -45,8 +61,6 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   useEffect(() => {
     // 1. Define the callback function that Telegram calls upon successful login
     (window as any).onTelegramAuth = (user: any) => {
-      
-      // Map Telegram data (snake_case) to our UserProfile interface (camelCase)
       const userData: UserProfile = {
         id: user.id.toString(),
         firstName: user.first_name,
@@ -54,20 +68,18 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         username: user.username,
         photoUrl: user.photo_url 
       };
-
       onLogin('telegram', userData);
     };
 
     // 2. Inject the Telegram script
     if (telegramWrapperRef.current) {
-        // Clear previous content to prevent duplicates
         telegramWrapperRef.current.innerHTML = ''; 
         
         const script = document.createElement('script');
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
         script.setAttribute('data-size', 'large');
-        script.setAttribute('data-radius', '12');
+        script.setAttribute('data-radius', '24'); // Match button rounding
         script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-userpic', 'false');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
@@ -75,87 +87,162 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
         telegramWrapperRef.current.appendChild(script);
     }
+  }, [onLogin, isLogin]); // Re-inject on view toggle to ensure widget shows
 
-    return () => {
-       // Cleanup if necessary
-    };
-  }, [onLogin]);
+  const handleManualAuth = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simulate manual auth with Google provider context for demo
+    onLogin('google', { firstName: formData.fullName || 'New', username: formData.email.split('@')[0] });
+  };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-dark-900 relative overflow-hidden">
-      {/* Background Decor */}
-      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-brand-green/5 to-transparent pointer-events-none" />
+    <div className="min-h-screen bg-[#0B0E14] text-white flex flex-col px-8 py-12 font-sans transition-all duration-500">
+      
+      {/* Back Button for Signup */}
+      {!isLogin && (
+        <button 
+          onClick={() => setIsLogin(true)}
+          className="mb-8 p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors w-fit"
+        >
+          <ArrowLeft size={28} />
+        </button>
+      )}
 
-      <div className="z-10 w-full max-w-sm flex flex-col items-center">
-        {/* Logo Placeholder */}
-        <div className="mb-8 relative">
-            <div className="w-20 h-20 bg-brand-green rounded-xl rotate-45 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)]">
-                <div className="w-10 h-10 bg-dark-900 rotate-90" />
+      {/* Header Section */}
+      <div className="mb-10">
+        {isLogin && (
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-12 h-12 flex items-center justify-center">
+                <NexxLogoBolt />
             </div>
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-24 bg-dark-900 rotate-45"></div>
+            <h1 className="text-3xl font-bold tracking-tight">Nexxtrade</h1>
+          </div>
+        )}
+
+        <h2 className="text-4xl font-bold mb-3">
+          {isLogin ? 'Welcome back' : 'Create Account'}
+        </h2>
+        <p className="text-gray-400 text-lg">
+          {isLogin ? 'Sign in to access your signals' : 'Join Nexxtrade for premium signals'}
+        </p>
+      </div>
+
+      {/* Form Section */}
+      <form onSubmit={handleManualAuth} className="space-y-4">
+        {!isLogin && (
+          <div className="relative group">
+            <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+              <User size={22} />
+            </div>
+            <input 
+              type="text" 
+              placeholder="Full Name"
+              required={!isLogin}
+              value={formData.fullName}
+              onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+              className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+            />
+          </div>
+        )}
+
+        <div className="relative group">
+          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+            <Mail size={22} />
+          </div>
+          <input 
+            type="email" 
+            placeholder="Email"
+            required
+            value={formData.email}
+            onChange={(e) => setFormData({...formData, email: e.target.value})}
+            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+          />
         </div>
 
-        <h1 className="text-3xl font-bold text-white mb-2 text-center">
-          {isLogin ? 'Hello NexxTrader' : 'Become A NexxTrader'}
-        </h1>
-        <p className="text-gray-400 text-center mb-12">
-          {isLogin 
-            ? 'Let\'s go back to trading like the banks.' 
-            : 'Join thousands of traders worldwide.'}
-        </p>
+        <div className="relative group">
+          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-brand-green transition-colors">
+            <Lock size={22} />
+          </div>
+          <input 
+            type="password" 
+            placeholder="Password"
+            required
+            value={formData.password}
+            onChange={(e) => setFormData({...formData, password: e.target.value})}
+            className="w-full bg-[#151A25] border border-transparent focus:border-brand-green/30 rounded-2xl py-5 pl-14 pr-6 text-white text-lg placeholder:text-gray-500 outline-none transition-all"
+          />
+        </div>
 
-        <div className="w-full space-y-4 mb-12">
-          {/* Google Button */}
-          <button 
-            onClick={() => googleLogin()}
-            className="w-full bg-gray-200 hover:bg-white text-dark-900 font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-            </svg>
-            Continue with Google
-          </button>
+        <button 
+          type="submit"
+          className="w-full bg-brand-green hover:bg-brand-neon text-dark-900 font-bold py-5 rounded-2xl text-xl mt-4 transition-all active:scale-[0.98] shadow-lg shadow-brand-green/10"
+        >
+          {isLogin ? 'Login' : 'Sign Up'}
+        </button>
+      </form>
 
-          {/* Telegram Login Widget */}
-          <div className="w-full flex flex-col gap-2">
-             <div className="relative w-full flex justify-center min-h-[50px] bg-dark-800 rounded-2xl">
-                 {/* Placeholder Text */}
-                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                     <span className="text-gray-500 text-xs font-medium animate-pulse">Loading Telegram...</span>
-                 </div>
-                 
-                 {/* The Widget Script Injects Here */}
-                 <div ref={telegramWrapperRef} className="z-10 flex items-center justify-center w-full" />
-             </div>
+      {/* OR Divider */}
+      <div className="flex items-center gap-4 my-10">
+        <div className="flex-1 h-[1px] bg-gray-700/50"></div>
+        <span className="text-gray-500 text-sm font-bold tracking-widest uppercase">OR</span>
+        <div className="flex-1 h-[1px] bg-gray-700/50"></div>
+      </div>
+
+      {/* Social Login Section */}
+      <div className="space-y-4">
+        {/* Custom Google Button */}
+        <button 
+          onClick={() => googleLogin()}
+          className="w-full border border-gray-600 hover:bg-white/5 text-white font-semibold py-5 px-6 rounded-[30px] flex items-center justify-center gap-4 transition-all"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+          </svg>
+          <span className="text-lg">Continue with Google</span>
+        </button>
+
+        {/* Telegram Widget Wrapper */}
+        <div className="w-full relative group">
+          {/* We wrap the script in a div that we can style as a button fallback */}
+          <div className="w-full min-h-[72px] border border-gray-600 rounded-[30px] flex items-center justify-center overflow-hidden transition-all hover:bg-[#2AABEE]/5">
+             {/* Actual Telegram script injects here */}
+             <div ref={telegramWrapperRef} className="z-10 scale-110" />
              
-             {/* Help Text for Mobile Debugging */}
-             <div className="text-center px-4">
-                 <p className="text-[10px] text-gray-600">
-                    Don't see the button? Ensure your domain is whitelisted in @BotFather. 
-                    Local IPs (192.168.x.x) are not supported by Telegram.
-                 </p>
+             {/* Placeholder UI if script takes a second */}
+             <div className="absolute inset-0 flex items-center justify-center gap-4 pointer-events-none group-has-[iframe]:hidden">
+                <div className="bg-[#2AABEE] p-1.5 rounded-full">
+                  <Send size={18} fill="currentColor" />
+                </div>
+                <span className="text-lg font-semibold">Continue with Telegram</span>
              </div>
           </div>
         </div>
+      </div>
 
-        <div className="text-center">
-          <p className="text-gray-400 text-sm">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-brand-green font-medium hover:underline"
+      {/* Footer Link */}
+      <div className="mt-auto pt-8 text-center">
+        {isLogin ? (
+          <p className="text-gray-400 text-lg">
+            Don't have an account? <button 
+              onClick={() => setIsLogin(false)}
+              className="text-brand-green font-bold hover:text-brand-neon ml-1"
             >
-              {isLogin ? 'Sign Up' : 'Login'}
+              Sign Up
             </button>
           </p>
-        </div>
-
-        <p className="text-center text-xs text-gray-500 mt-8 max-w-xs leading-relaxed">
-            By continuing, you agree to our Terms of Service and Privacy Policy.
-        </p>
+        ) : (
+          <p className="text-gray-400 text-lg">
+            Already have an account? <button 
+              onClick={() => setIsLogin(true)}
+              className="text-brand-green font-bold hover:text-brand-neon ml-1"
+            >
+              Login
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );
