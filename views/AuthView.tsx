@@ -30,13 +30,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
     // 2. Inject the Telegram script
     if (telegramWrapperRef.current) {
-        telegramWrapperRef.current.innerHTML = ''; // Clear to prevent duplicates
+        // Clear previous content to prevent duplicates
+        telegramWrapperRef.current.innerHTML = ''; 
         
         const script = document.createElement('script');
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
         script.setAttribute('data-size', 'large');
-        script.setAttribute('data-radius', '15');
+        script.setAttribute('data-radius', '12');
         script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-userpic', 'false');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
@@ -89,8 +90,24 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           </button>
 
           {/* Telegram Login Widget */}
-          <div className="w-full flex justify-center">
-             <div ref={telegramWrapperRef} className="flex justify-center w-full min-h-[50px] items-center" />
+          <div className="w-full flex flex-col gap-2">
+             <div className="relative w-full flex justify-center min-h-[50px] bg-dark-800 rounded-2xl">
+                 {/* Placeholder Text */}
+                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                     <span className="text-gray-500 text-xs font-medium animate-pulse">Loading Telegram...</span>
+                 </div>
+                 
+                 {/* The Widget Script Injects Here */}
+                 <div ref={telegramWrapperRef} className="z-10 flex items-center justify-center w-full" />
+             </div>
+             
+             {/* Help Text for Mobile Debugging */}
+             <div className="text-center px-4">
+                 <p className="text-[10px] text-gray-600">
+                    Don't see the button? Ensure your domain is whitelisted in @BotFather. 
+                    Local IPs (192.168.x.x) are not supported by Telegram.
+                 </p>
+             </div>
           </div>
         </div>
 
