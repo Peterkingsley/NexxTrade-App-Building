@@ -21,14 +21,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
   };
 
   // Mocking connection state based on login provider
-  // In a real app, this would be fetched from user profile
   const isGoogleConnected = authProvider === 'google';
   const isTelegramConnected = authProvider === 'telegram';
 
   // Determine display name
-  const displayName = userProfile 
-    ? `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim() || userProfile.username 
-    : 'NexxTrader';
+  // If Telegram gives us a First Name, use it. Otherwise fallback to Username, then default.
+  const displayName = userProfile?.firstName 
+    ? `${userProfile.firstName} ${userProfile.lastName || ''}`.trim() 
+    : (userProfile?.username || 'NexxTrader');
   
   // Determine display username/status
   const displayStatus = userProfile?.username 
@@ -65,6 +65,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                       src={userProfile.photoUrl} 
                       alt="Profile" 
                       className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                  ) : (
                     <User size={64} className="text-emerald-900 opacity-50" />
@@ -74,8 +75,15 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                 <Camera size={16} />
             </button>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-1">{displayName}</h2>
-        <p className="text-gray-400 text-sm">{displayStatus}</p>
+        <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-2xl font-bold text-white">{displayName}</h2>
+            {isTelegramConnected && (
+                <div className="bg-[#2AABEE] rounded-full p-1" title="Verified Telegram User">
+                    <Check size={12} className="text-white" strokeWidth={4} />
+                </div>
+            )}
+        </div>
+        <p className="text-gray-400 text-sm font-medium">{displayStatus}</p>
       </div>
 
       <div className="px-4 space-y-4">
@@ -280,7 +288,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                             </div>
                             <div>
                                 <h4 className="text-white font-bold text-sm">Telegram</h4>
-                                <p className="text-gray-500 text-xs">{isTelegramConnected ? 'Connected' : 'Not Connected'}</p>
+                                {isTelegramConnected ? (
+                                     <p className="text-emerald-400 text-xs font-medium">@{userProfile?.username}</p>
+                                ) : (
+                                     <p className="text-gray-500 text-xs">Not Connected</p>
+                                )}
                             </div>
                         </div>
                         {isTelegramConnected ? (

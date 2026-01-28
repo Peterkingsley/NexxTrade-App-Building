@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
@@ -11,45 +10,43 @@ const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // 1. Define the callback function that Telegram calls upon successful login
     (window as any).onTelegramAuth = (user: any) => {
-      console.log("Telegram User Data:", user);
       
-      // Map Telegram data to our UserProfile interface
+      // Map Telegram data (snake_case) to our UserProfile interface (camelCase)
       const userData: UserProfile = {
-        id: user.id,
+        id: user.id.toString(),
         firstName: user.first_name,
         lastName: user.last_name,
         username: user.username,
-        photoUrl: user.photo_url
+        photoUrl: user.photo_url 
       };
 
       onLogin('telegram', userData);
     };
 
     // 2. Inject the Telegram script
-    const script = document.createElement('script');
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '16');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-userpic', 'false');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    script.async = true;
+    if (telegramWrapperRef.current) {
+        telegramWrapperRef.current.innerHTML = ''; // Clear to prevent duplicates
+        
+        const script = document.createElement('script');
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
+        script.setAttribute('data-size', 'large');
+        script.setAttribute('data-radius', '15');
+        script.setAttribute('data-request-access', 'write');
+        script.setAttribute('data-userpic', 'false');
+        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+        script.async = true;
 
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-        // Clear the container to remove the fallback button before appending the widget
-        container.innerHTML = '';
-        container.appendChild(script);
+        telegramWrapperRef.current.appendChild(script);
     }
 
     return () => {
-      // Cleanup global callback if needed
-      // (window as any).onTelegramAuth = undefined;
+       // Cleanup if necessary
     };
   }, [onLogin]);
 
@@ -91,26 +88,10 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             Continue with Google
           </button>
 
-          {/* Telegram Login Widget Container */}
-          <div className="w-full flex justify-center min-h-[54px] relative">
-             <div id="telegram-login-container" className="flex justify-center w-full">
-                {/* Fallback button shown if JS is disabled or domain not whitelisted yet */}
-                <button 
-                    onClick={() => {
-                        alert("If the widget is not appearing, please whitelist your domain in @BotFather using /setdomain");
-                        onLogin('telegram');
-                    }}
-                    className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
-                >
-                    <Send className="w-5 h-5" fill="currentColor" />
-                    Continue with Telegram
-                </button>
-             </div>
+          {/* Telegram Login Widget */}
+          <div className="w-full flex justify-center">
+             <div ref={telegramWrapperRef} className="flex justify-center w-full min-h-[50px] items-center" />
           </div>
-          
-          {/* <p className="text-[10px] text-gray-600 text-center mt-2 px-4">
-             Note: You must run <b>/setdomain</b> in @BotFather for your site URL for the button to appear.
-          </p> */}
         </div>
 
         <div className="text-center">
