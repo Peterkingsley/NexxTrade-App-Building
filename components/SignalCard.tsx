@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode, TrendingUp, TrendingDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { Signal } from '../types';
 
 interface SignalCardProps {
@@ -18,23 +18,107 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'neutral'>('neutral');
 
   const isLocked = signal.entry === 'Locked' || !signal.slUnlock;
-  const isClosed = signal.status === 'closed';
 
-  // Calculate live PnL if available and not locked
-  let livePnl = null;
-  if (livePrice && !isLocked && signal.status === 'active' && signal.entry !== 'Locked') {
-      const entryPrice = parseFloat(signal.entry.replace(/,/g, ''));
-      if (!isNaN(entryPrice) && entryPrice > 0) {
-          // Calculate percentage difference based on side
-          let diff = 0;
-          if (signal.side === 'Short') {
-             diff = ((entryPrice - livePrice) / entryPrice) * 100;
-          } else {
-             diff = ((livePrice - entryPrice) / entryPrice) * 100;
+  // --- Automatic Calculation Logic ---
+  
+  const parsePrice = (priceStr: string) => {
+      if (!priceStr || priceStr === 'Locked') return NaN;
+      // Remove commas, take first numeric sequence if range "2000-2050" -> 2000
+      const clean = priceStr.replace(/,/g, '').split('-')[0].trim();
+      return parseFloat(clean);
+  };
+
+  const calculatePnl = (entry: number, exit: number, side: 'Long' | 'Short') => {
+      if (side === 'Long') return ((exit - entry) / entry) * 100;
+      return ((entry - exit) / entry) * 100;
+  };
+
+  const { displayPnl, displayTpTargets, displayStatus, isSlHit, isTpSecured } = useMemo(() => {
+      // Default to database values
+      let currentPnl = signal.pnl;
+      let currentTpTargets = signal.tpTargets;
+      let currentStatus = signal.status;
+      let slHit = false;
+      let tpSecured = false;
+
+      // Only override if we have a live price, trade is active/open, and data isn't locked
+      if (livePrice && !isLocked && signal.status === 'active') {
+          const entryPrice = parsePrice(signal.entry);
+          const stopLossPrice = parsePrice(signal.stopLoss);
+
+          if (!isNaN(entryPrice)) {
+              // 1. Calculate Derived TP Hits (DB + Live)
+              // We need to know which TPs are hit. We trust DB for past hits, and Live for current hits.
+              currentTpTargets = signal.tpTargets.map(tp => {
+                  const tpPrice = parsePrice(tp.price);
+                  let isHit = tp.hit; // Start with DB state
+                  
+                  if (!isNaN(tpPrice)) {
+                       if (signal.side === 'Long' && livePrice >= tpPrice) isHit = true;
+                       if (signal.side === 'Short' && livePrice <= tpPrice) isHit = true;
+                  }
+                  return { ...tp, hit: isHit, priceValue: tpPrice };
+              });
+
+              // Check if All TPs are hit
+              const areAllTpHit = currentTpTargets.length > 0 && currentTpTargets.every(tp => tp.hit);
+              
+              // Find highest TP hit index
+              let maxTpHitIndex = -1;
+              currentTpTargets.forEach((tp, idx) => {
+                  if (tp.hit) maxTpHitIndex = idx;
+              });
+              const isAnyTpHit = maxTpHitIndex !== -1;
+
+              // 2. Check Stop Loss
+              let liveSlHit = false;
+              if (!isNaN(stopLossPrice)) {
+                  if (signal.side === 'Long' && livePrice <= stopLossPrice) liveSlHit = true;
+                  if (signal.side === 'Short' && livePrice >= stopLossPrice) liveSlHit = true;
+              }
+
+              // 3. Determine Final Status and PnL
+              if (areAllTpHit) {
+                  currentStatus = 'closed';
+                  const finalTp = currentTpTargets[currentTpTargets.length - 1];
+                  // If all TPs hit, ROI is the last TP
+                  const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
+                  currentPnl = calculatePnl(entryPrice, priceToUse, signal.side);
+              } else if (liveSlHit) {
+                  // SL is physically hit
+                  if (isAnyTpHit) {
+                      // Logic: Hit TP1/2/3 then went to SL -> Close as Profitable at highest TP hit
+                      currentStatus = 'closed';
+                      tpSecured = true;
+                      
+                      // Calculate PnL based on highest TP Hit (Secured Profit)
+                      const maxTp = currentTpTargets[maxTpHitIndex];
+                      const priceToUse = !isNaN(parsePrice(maxTp.price)) ? parsePrice(maxTp.price) : entryPrice;
+                      currentPnl = calculatePnl(entryPrice, priceToUse, signal.side);
+                  } else {
+                      // Pure Loss (No TP hit)
+                      slHit = true;
+                      currentStatus = 'SL Hit';
+                      currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side);
+                  }
+              } else {
+                  // Trade Active - Floating PnL
+                  currentStatus = 'active';
+                  currentPnl = calculatePnl(entryPrice, livePrice, signal.side);
+              }
           }
-          livePnl = diff;
       }
-  }
+
+      return { 
+          displayPnl: currentPnl, 
+          displayTpTargets: currentTpTargets, 
+          displayStatus: currentStatus,
+          isSlHit: slHit,
+          isTpSecured: tpSecured
+      };
+  }, [signal, livePrice, isLocked]);
+
+  const isClosed = displayStatus === 'closed' || displayStatus === 'SL Hit';
 
   // Handle price flash effect
   useEffect(() => {
@@ -102,7 +186,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           try {
               await navigator.share({
                   title: `My Trade on ${signal.pair}`,
-                  text: `Check out my trade on NexxTrade! ${signal.pnl}% ROI on ${signal.pair}.`,
+                  text: `Check out my trade on NexxTrade! ${displayPnl.toFixed(2)}% ROI on ${signal.pair}.`,
                   url: 'https://nexxtrade.com',
               });
           } catch (error) {
@@ -128,9 +212,11 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
     </button>
   );
 
-  // Determine display PnL (Use live if active & available, else static)
-  const displayPnl = (livePnl !== null && signal.status === 'active') ? livePnl : signal.pnl;
   const pnlColorClass = displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+  const statusColorClass = 
+    displayStatus === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' :
+    displayStatus === 'SL Hit' ? 'bg-red-500/10 text-red-400 border-red-500/10' :
+    'bg-gray-700/50 text-gray-400 border-gray-600/30';
 
   return (
     <>
@@ -139,7 +225,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         className={`bg-dark-800 rounded-2xl p-4 border border-dark-700/50 shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col ${isClosed ? 'cursor-pointer hover:bg-dark-700 hover:border-dark-600 hover:shadow-emerald-900/10 hover:shadow-xl' : ''}`}
       >
         {/* Background glow for active signals */}
-        {signal.status === 'active' && (
+        {displayStatus === 'active' && (
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        )}
+        {isSlHit && (
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        )}
+        {isTpSecured && (
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         )}
         
@@ -161,8 +253,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-red-500/10 text-red-400 border-red-500/10'}`}>
                     {signal.side}
                 </span>
-                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-gray-700/50 text-gray-400 border-gray-600/30'}`}>
-                    {signal.status}
+                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${statusColorClass}`}>
+                    {displayStatus}
                 </span>
             </div>
           </div>
@@ -185,7 +277,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         {/* Time & Analysis Row */}
         <div className="flex justify-between items-center mb-4 relative z-10">
             <div className="flex items-center gap-1.5 text-gray-400">
-                <div className={`w-1.5 h-1.5 rounded-full ${signal.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`}></div>
+                <div className={`w-1.5 h-1.5 rounded-full ${displayStatus === 'active' ? 'bg-emerald-500 animate-pulse' : displayStatus === 'SL Hit' ? 'bg-red-500' : 'bg-gray-600'}`}></div>
                 <p className="text-xs font-medium">{signal.timeAgo}</p>
             </div>
             
@@ -226,12 +318,14 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           {/* Stop Loss Box */}
           <div 
             onClick={!signal.slUnlock ? handleUnlockClick : undefined}
-            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border border-dark-700/30 transition-colors duration-300 ${!signal.slUnlock ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
+            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${
+                isSlHit ? 'border-red-500/50 bg-red-500/5' : 'border-dark-700/30'
+            } ${!signal.slUnlock ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
           >
-             <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-0.5">Stop Loss</span>
+             <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${isSlHit ? 'text-red-400' : 'text-gray-500'}`}>Stop Loss</span>
               {signal.slUnlock ? (
                   <div className="flex items-center gap-1">
-                       <span className="text-red-400 font-mono font-medium text-sm">{signal.stopLoss}</span>
+                       <span className={`${isSlHit ? 'text-red-500' : 'text-red-400'} font-mono font-medium text-sm`}>{signal.stopLoss}</span>
                        {renderCopyButton(signal.stopLoss, `sl-${signal.id}`)}
                    </div>
               ) : (
@@ -244,7 +338,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         </div>
 
         {/* Take Profit Targets */}
-        {signal.tpTargets.length > 0 && (
+        {displayTpTargets.length > 0 && (
           <div className="space-y-2 relative z-10 flex-1">
             <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">
               <Zap size={10} className="text-yellow-500" fill="currentColor" />
@@ -252,7 +346,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
             </div>
             
             <div className="grid grid-cols-3 gap-2">
-              {signal.tpTargets.map((tp, idx) => (
+              {displayTpTargets.map((tp, idx) => (
                 <div 
                   key={idx} 
                   onClick={isLocked ? handleUnlockClick : undefined}
@@ -274,11 +368,25 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           </div>
         )}
         
-        {/* TP Hit Message */}
-        {signal.tpTargets.length > 0 && signal.tpTargets[0].hit && !isClosed && (
+        {/* Alerts / Status Messages */}
+        {isSlHit && (
+             <div className="mt-3 bg-red-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-red-500/20 relative z-10 animate-pulse">
+                <AlertTriangle size={12} className="text-red-500" />
+                <span className="text-[10px] font-medium text-red-400">Stop Loss Hit</span>
+            </div>
+        )}
+
+        {isTpSecured && (
+             <div className="mt-3 bg-emerald-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-emerald-500/20 relative z-10">
+                <Check size={12} className="text-emerald-500" />
+                <span className="text-[10px] font-medium text-emerald-400">Trade Closed • Profit Secured</span>
+            </div>
+        )}
+
+        {!isSlHit && !isTpSecured && displayTpTargets.length > 0 && displayTpTargets[0].hit && !isClosed && (
             <div className="mt-3 bg-emerald-500/5 p-2 rounded-lg flex items-center justify-center gap-2 border border-emerald-500/10 relative z-10">
                 <Check size={12} className="text-emerald-500" />
-                <span className="text-[10px] font-medium text-emerald-400/80">TP1 Hit • Secure Profits</span>
+                <span className="text-[10px] font-medium text-emerald-400/80">TP Hit • Secure Profits</span>
             </div>
         )}
       </div>
@@ -353,7 +461,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 </button>
 
                 {/* The Trade Card Node */}
-                <div id="trade-card" className={`relative overflow-hidden rounded-3xl p-6 ${signal.pnl >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-800' : 'bg-gradient-to-br from-red-600 to-red-800'} shadow-2xl border border-white/10`}>
+                <div id="trade-card" className={`relative overflow-hidden rounded-3xl p-6 ${displayPnl >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-800' : 'bg-gradient-to-br from-red-600 to-red-800'} shadow-2xl border border-white/10`}>
                     {/* Background Pattern */}
                     <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/40 to-transparent"></div>
                     <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
@@ -394,7 +502,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                             </div>
                             <div className="flex items-baseline gap-1">
                                 <span className="text-6xl font-black tracking-tighter drop-shadow-lg">
-                                    {signal.pnl >= 0 ? '+' : ''}{signal.pnl}%
+                                    {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
                                 </span>
                             </div>
                             <p className="opacity-90 font-medium text-lg mt-1">Return on Investment</p>
@@ -409,7 +517,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                             <div>
                                 <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider mb-0.5">Last Price</p>
                                 <p className="font-mono font-bold text-lg">
-                                    {signal.tpTargets.find(t => t.hit)?.price || signal.tpTargets[0]?.price || "---"}
+                                    {livePrice ? formatPrice(livePrice) : "---"}
                                 </p>
                             </div>
                              <div className="col-span-2 border-t border-white/10 pt-3 flex justify-between items-center">

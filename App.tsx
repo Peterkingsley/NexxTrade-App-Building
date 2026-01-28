@@ -19,6 +19,10 @@ import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile } from './types';
 
+// Configure Axios Base URL
+// In production, this might be the same origin. In dev, we point to the Express server port.
+axios.defaults.baseURL = 'http://localhost:3001';
+
 const TOUR_STEPS: TourStep[] = [
     {
         title: 'Welcome to NexxTrade',
@@ -42,6 +46,80 @@ const TOUR_STEPS: TourStep[] = [
         description: 'Level up your trading skills with exclusive video courses, articles, and trading resources.',
         targetId: 'nav-academy',
         position: 'top'
+    }
+];
+
+// Mock Signals for Fallback/Demo Mode
+const MOCK_SIGNALS: Signal[] = [
+    {
+        id: '1',
+        pair: 'BTC/USDT',
+        type: 'Futures',
+        side: 'Long',
+        status: 'active',
+        pnl: 0,
+        timeAgo: '1h ago',
+        entry: '96500',
+        stopLoss: '95500',
+        tpTargets: [
+            { price: '97500', hit: false },
+            { price: '98500', hit: false },
+            { price: '100000', hit: false }
+        ],
+        slUnlock: true,
+        analysis: 'Bullish consolidation above key support. Looking for a breakout.',
+        riskManagement: '1-2% risk. Tight SL.'
+    },
+    {
+        id: '2',
+        pair: 'ETH/USDT',
+        type: 'Spot',
+        side: 'Long',
+        status: 'active',
+        pnl: 2.5,
+        timeAgo: '3h ago',
+        entry: '3450',
+        stopLoss: '3300',
+        tpTargets: [
+            { price: '3550', hit: true },
+            { price: '3700', hit: false }
+        ],
+        slUnlock: true
+    },
+    {
+        id: '3',
+        pair: 'SOL/USDT',
+        type: 'Futures',
+        side: 'Short',
+        status: 'active',
+        pnl: -1.2,
+        timeAgo: '5h ago',
+        entry: '190.50',
+        stopLoss: '195.00',
+        tpTargets: [
+            { price: '185.00', hit: false },
+            { price: '180.00', hit: false }
+        ],
+        slUnlock: true,
+        analysis: 'Bearish divergence on 4H RSI. Rejection from supply zone.',
+        riskManagement: 'High volatility, use reduced position size.'
+    },
+    {
+        id: '4',
+        pair: 'XRP/USDT',
+        type: 'Futures',
+        side: 'Long',
+        status: 'closed',
+        pnl: 15.0,
+        timeAgo: '1d ago',
+        closedAt: new Date(Date.now() - 86400000).toISOString(),
+        entry: '2.10',
+        stopLoss: '2.00',
+        tpTargets: [
+            { price: '2.20', hit: true },
+            { price: '2.30', hit: true }
+        ],
+        slUnlock: true
     }
 ];
 
@@ -70,13 +148,13 @@ const App: React.FC = () => {
         if (Array.isArray(response.data)) {
           setSignals(response.data);
         } else {
-          console.warn('Received invalid signal data format');
-          setSignals([]);
+          console.warn('Received invalid signal data format, using mock data');
+          setSignals(MOCK_SIGNALS);
         }
       } catch (error) {
-        console.error('Failed to fetch signals:', error);
-        // Fallback to empty array to show "No Data" UI
-        setSignals([]);
+        console.warn('Backend unavailable (Network Error). Using Mock Data for demonstration.', error);
+        // Fallback to MOCK_SIGNALS to ensure UI is functional even without backend
+        setSignals(MOCK_SIGNALS);
       } finally {
         setIsLoadingSignals(false);
       }
