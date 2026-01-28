@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Bell, ChevronRight, Megaphone, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import SignalCard from '../components/SignalCard';
 import { Signal, ViewState } from '../types';
@@ -58,6 +58,49 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
     setGroupsLabel('Coming Soon');
     setTimeout(() => setGroupsLabel('Groups'), 2000);
   };
+
+  // --- Statistics Calculation ---
+  const stats = useMemo(() => {
+    const now = new Date();
+    
+    // 1. Active Signals
+    const active = signals.filter(s => s.status === 'active');
+    
+    // 2. New Today (Calculated based on calendar day)
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const newToday = signals.filter(s => {
+        if (s.created_at) {
+            return new Date(s.created_at).getTime() >= startOfDay;
+        }
+        // Fallback for mock data if needed, though production should use created_at
+        return false;
+    }).length;
+
+    // 3. Closed Signals
+    const closed = signals.filter(s => s.status === 'closed');
+
+    // 4. Win Rate (Current Month)
+    const currentMonthSignals = closed.filter(s => {
+        if (!s.closedAt) return false;
+        const d = new Date(s.closedAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    
+    const monthlyWins = currentMonthSignals.filter(s => s.pnl > 0).length;
+    const monthlyTotal = currentMonthSignals.length;
+    const monthlyWinRate = monthlyTotal > 0 ? Math.round((monthlyWins / monthlyTotal) * 100) : 0;
+
+    // 5. Total Profit (All Time)
+    const totalProfit = closed.reduce((acc, curr) => acc + curr.pnl, 0);
+
+    return {
+        activeCount: active.length,
+        newToday: newToday,
+        monthlyWinRate: monthlyWinRate,
+        totalProfit: totalProfit,
+        totalTrades: closed.length
+    };
+  }, [signals]);
 
   return (
     <div className="pb-24 md:pb-6">
@@ -145,23 +188,31 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
             <div className="bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
                 <p className="text-gray-400 text-sm font-medium mb-1">Active Signals</p>
                 <h3 className="text-3xl font-bold text-white mb-1">
-                    {isLoading ? '-' : signals.filter(s => s.status === 'active').length}
+                    {isLoading ? <span className="animate-pulse">...</span> : stats.activeCount}
                 </h3>
-                <p className="text-emerald-400 text-xs font-medium">+3 today</p>
+                <p className="text-emerald-400 text-xs font-medium">
+                    {isLoading ? '' : `+${stats.newToday} today`}
+                </p>
             </div>
             <div className="bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
                 <p className="text-gray-400 text-sm font-medium mb-1">Win Rate</p>
-                <h3 className="text-3xl font-bold text-white mb-1">78%</h3>
+                <h3 className="text-3xl font-bold text-white mb-1">
+                    {isLoading ? <span className="animate-pulse">...</span> : `${stats.monthlyWinRate}%`}
+                </h3>
                 <p className="text-emerald-400 text-xs font-medium">This month</p>
             </div>
              <div className="hidden md:block bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
                 <p className="text-gray-400 text-sm font-medium mb-1">Total Profit</p>
-                <h3 className="text-3xl font-bold text-white mb-1">458%</h3>
+                <h3 className="text-3xl font-bold text-white mb-1">
+                    {isLoading ? <span className="animate-pulse">...</span> : `${stats.totalProfit.toFixed(0)}%`}
+                </h3>
                 <p className="text-emerald-400 text-xs font-medium">All time</p>
             </div>
             <div className="hidden md:block bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
                 <p className="text-gray-400 text-sm font-medium mb-1">Total Trades</p>
-                <h3 className="text-3xl font-bold text-white mb-1">2,405</h3>
+                <h3 className="text-3xl font-bold text-white mb-1">
+                     {isLoading ? <span className="animate-pulse">...</span> : stats.totalTrades.toLocaleString()}
+                </h3>
                 <p className="text-gray-500 text-xs font-medium">Since inception</p>
             </div>
         </div>

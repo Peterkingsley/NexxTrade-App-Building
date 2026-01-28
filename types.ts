@@ -20,6 +20,7 @@ export interface Signal {
   status: 'active' | 'closed';
   pnl: number;
   timeAgo: string;
+  created_at?: string; // ISO timestamp from DB
   closedAt?: string; // ISO timestamp for performance charting
   entry: string;
   stopLoss: string;
