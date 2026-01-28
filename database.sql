@@ -12,6 +12,7 @@ CREATE TABLE users (
     full_name VARCHAR(100),
     username VARCHAR(50) UNIQUE,
     photo_url TEXT,
+    telegram_id VARCHAR(255) UNIQUE, -- Added Telegram ID
     role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'analyst')),
     subscription_plan VARCHAR(20) DEFAULT 'free' CHECK (subscription_plan IN ('free', 'pro', 'elite')),
     subscription_expiry TIMESTAMPTZ,

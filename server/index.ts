@@ -45,6 +45,7 @@ const initDb = async () => {
                 full_name VARCHAR(100),
                 username VARCHAR(50) UNIQUE,
                 photo_url TEXT,
+                telegram_id VARCHAR(255) UNIQUE,
                 role VARCHAR(20) DEFAULT 'user',
                 subscription_plan VARCHAR(20) DEFAULT 'free',
                 subscription_expiry TIMESTAMPTZ,
@@ -56,6 +57,13 @@ const initDb = async () => {
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
         `);
+
+        // Migration: Add telegram_id if it doesn't exist (for existing databases)
+        try {
+            await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id VARCHAR(255) UNIQUE`);
+        } catch (e) {
+            console.log('Note: telegram_id column check/update', (e as Error).message);
+        }
 
         await query(`
             CREATE TABLE IF NOT EXISTS linked_accounts (
@@ -143,19 +151,28 @@ app.post('/api/auth/login', async (req, res) => {
     const { provider, email, firstName, lastName, username, photoUrl, providerId } = req.body;
 
     try {
-        if (!email && !username) {
-            return res.status(400).json({ error: 'Email or Username required' });
+        if (!email && !username && !providerId) {
+            return res.status(400).json({ error: 'Email, Username, or Provider ID required' });
         }
 
         let userRes;
         
-        if (email) {
+        // 1. Check by Telegram ID in users table
+        if (provider === 'telegram' && providerId) {
+             userRes = await query('SELECT * FROM users WHERE telegram_id = $1', [providerId.toString()]);
+        }
+
+        // 2. Check by Email
+        if ((!userRes || userRes.rows.length === 0) && email) {
             userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
-        } else {
+        } 
+        
+        // 3. Check Linked Accounts (legacy/backup/cross-provider)
+        if (!userRes || userRes.rows.length === 0) {
             const linkRes = await query('SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2', [provider, providerId]);
             if (linkRes.rows.length > 0) {
                 userRes = await query('SELECT * FROM users WHERE id = $1', [linkRes.rows[0].user_id]);
-            } else {
+            } else if (username) {
                  userRes = await query('SELECT * FROM users WHERE username = $1', [username]);
             }
         }
@@ -167,8 +184,32 @@ app.post('/api/auth/login', async (req, res) => {
         if (userRes && userRes.rows.length > 0) {
             userId = userRes.rows[0].id;
             userData = userRes.rows[0];
-            await query('UPDATE users SET full_name = COALESCE($1, full_name), photo_url = COALESCE($2, photo_url), updated_at = NOW() WHERE id = $3', 
-                [`${firstName} ${lastName || ''}`.trim(), photoUrl, userId]);
+            
+            // Build dynamic update query
+            const updateFields = [];
+            const updateValues = [];
+            let valueIndex = 1;
+
+            updateFields.push(`full_name = COALESCE($${valueIndex++}, full_name)`);
+            updateValues.push(`${firstName} ${lastName || ''}`.trim());
+
+            updateFields.push(`photo_url = COALESCE($${valueIndex++}, photo_url)`);
+            updateValues.push(photoUrl);
+            
+            // Explicitly record telegram_id in users table if coming from telegram login
+            if (provider === 'telegram' && providerId) {
+                updateFields.push(`telegram_id = COALESCE($${valueIndex++}, telegram_id)`);
+                updateValues.push(providerId.toString());
+            }
+
+            updateFields.push(`updated_at = NOW()`);
+            
+            // Add ID for WHERE clause
+            updateValues.push(userId);
+
+            const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${valueIndex}`;
+            await query(updateQuery, updateValues);
+
         } else {
             isNewUser = true;
             const refCode = generateReferralCode();
@@ -181,10 +222,18 @@ app.post('/api/auth/login', async (req, res) => {
             }
 
             const insertRes = await query(`
-                INSERT INTO users (email, full_name, username, photo_url, referral_code, wallet_balance, is_email_verified)
-                VALUES ($1, $2, $3, $4, $5, 0.00, $6)
+                INSERT INTO users (email, full_name, username, photo_url, referral_code, wallet_balance, is_email_verified, telegram_id)
+                VALUES ($1, $2, $3, $4, $5, 0.00, $6, $7)
                 RETURNING *
-            `, [finalEmail, fullName, finalUsername, photoUrl, refCode, provider === 'google']);
+            `, [
+                finalEmail, 
+                fullName, 
+                finalUsername, 
+                photoUrl, 
+                refCode, 
+                provider === 'google',
+                (provider === 'telegram' && providerId) ? providerId.toString() : null
+            ]);
             
             userId = insertRes.rows[0].id;
             userData = insertRes.rows[0];
@@ -198,6 +247,10 @@ app.post('/api/auth/login', async (req, res) => {
             `, [userId, provider, providerId.toString()]);
         }
 
+        // Fetch all linked accounts for this user to return in login response
+        const linkedRes = await query('SELECT provider FROM linked_accounts WHERE user_id = $1', [userId]);
+        const linkedProviders = linkedRes.rows.map(r => r.provider);
+
         res.json({
             id: userData.id,
             firstName: firstName,
@@ -205,7 +258,8 @@ app.post('/api/auth/login', async (req, res) => {
             username: userData.username,
             photoUrl: userData.photo_url,
             referralCode: userData.referral_code,
-            isNewUser
+            isNewUser,
+            linkedProviders
         });
 
     } catch (error) {
@@ -245,6 +299,11 @@ app.post('/api/user/link-account', async (req, res) => {
             'INSERT INTO linked_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)',
             [userId, provider, providerId.toString()]
         );
+        
+        // Also update the users table if it's telegram
+        if (provider === 'telegram') {
+            await query('UPDATE users SET telegram_id = $1 WHERE id = $2 AND telegram_id IS NULL', [providerId.toString(), userId]);
+        }
         
         res.json({ success: true });
     } catch (error) {

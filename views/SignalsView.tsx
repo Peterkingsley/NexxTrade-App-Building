@@ -12,12 +12,6 @@ interface SignalsViewProps {
 
 const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, signals, livePrices, isLoading }) => {
   const [filter, setFilter] = useState<'All' | 'Active' | 'Closed' | 'Spot'>('All');
-  const [groupsLabel, setGroupsLabel] = useState('Groups');
-
-  const handleGroupsClick = () => {
-    setGroupsLabel('Coming Soon');
-    setTimeout(() => setGroupsLabel('Groups'), 2000);
-  };
 
   const filteredSignals = signals.filter(s => {
       if (filter === 'All') return true;
@@ -47,18 +41,6 @@ const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, signals, livePric
                 <History size={14} />
                 <span>History</span>
             </button>
-
-            <div className="flex bg-dark-800 rounded-lg p-1 border border-dark-700">
-                <button className="px-4 py-1.5 bg-dark-700 text-white text-xs font-semibold rounded shadow-sm">
-                    NexxTrade
-                </button>
-                <button 
-                    onClick={handleGroupsClick}
-                    className={`px-4 py-1.5 text-xs font-medium transition-all duration-300 ${groupsLabel === 'Coming Soon' ? 'text-brand-green' : 'text-gray-400 hover:text-white'}`}
-                >
-                    {groupsLabel}
-                </button>
-            </div>
 
             <button 
                 onClick={() => onNavigate('notifications')}

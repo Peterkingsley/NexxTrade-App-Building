@@ -5,7 +5,7 @@ import { Mail, Lock, User, ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
-  onLogin: (provider: AuthProvider, userData?: UserProfile) => void;
+  onLogin: (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[]) => void;
 }
 
 // Bot username provided
@@ -59,7 +59,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             photoUrl: dbUser.photoUrl
           };
           
-          onLogin(provider, profile);
+          onLogin(provider, profile, dbUser.linkedProviders);
 
       } catch (error) {
           console.error('Backend Authentication Failed:', error);

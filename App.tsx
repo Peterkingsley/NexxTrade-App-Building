@@ -185,9 +185,10 @@ const App: React.FC = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const handleLogin = (provider: AuthProvider, userData?: UserProfile) => {
+  const handleLogin = (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[]) => {
     setAuthProvider(provider);
-    setConnectedProviders([provider]); // Initialize with the login provider
+    // Initialize connectedProviders with what the DB returned, or at least the current provider
+    setConnectedProviders(linkedAccounts || [provider]);
     if (userData) {
       setUserProfile(userData);
     }
