@@ -1,0 +1,7 @@
+{
+  "name": "NexxTrade",
+  "description": "A premium cryptocurrency trading dashboard featuring real-time signals, performance analytics, educational resources, and user profile management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
