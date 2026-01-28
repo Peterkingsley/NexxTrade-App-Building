@@ -221,7 +221,11 @@ const App: React.FC = () => {
   const [previousView, setPreviousView] = useState<ViewState>('home');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showTour, setShowTour] = useState(false);
+  
+  // Auth State
   const [authProvider, setAuthProvider] = useState<AuthProvider>('google');
+  // New state to track all connected providers
+  const [connectedProviders, setConnectedProviders] = useState<AuthProvider[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -238,11 +242,19 @@ const App: React.FC = () => {
 
   const handleLogin = (provider: AuthProvider, userData?: UserProfile) => {
     setAuthProvider(provider);
+    setConnectedProviders([provider]); // Initialize with the login provider
     if (userData) {
       setUserProfile(userData);
     }
     // Instead of going straight to home, go to referral input
     setCurrentView('referral-input');
+  };
+
+  const handleLinkProvider = (provider: AuthProvider) => {
+    if (!connectedProviders.includes(provider)) {
+        setConnectedProviders([...connectedProviders, provider]);
+        // In a real app, you would merge user data here
+    }
   };
 
   const handleReferralComplete = () => {
@@ -254,6 +266,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentView('auth');
     setUserProfile(null);
+    setConnectedProviders([]);
   };
 
   const handleNavigate = (view: ViewState) => {
@@ -306,7 +319,15 @@ const App: React.FC = () => {
       case 'academy':
         return <AcademyView onNavigate={handleNavigate} />;
       case 'profile':
-        return <ProfileView onNavigate={handleNavigate} onLogout={handleLogout} isDarkMode={isDarkMode} toggleTheme={toggleTheme} authProvider={authProvider} userProfile={userProfile} />;
+        return <ProfileView 
+            onNavigate={handleNavigate} 
+            onLogout={handleLogout} 
+            isDarkMode={isDarkMode} 
+            toggleTheme={toggleTheme} 
+            userProfile={userProfile}
+            connectedProviders={connectedProviders}
+            onLinkProvider={handleLinkProvider}
+        />;
       case 'notifications':
         return <NotificationsView onBack={handleBack} />;
       case 'notification-settings':

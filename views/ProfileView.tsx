@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { MessageSquare, Bell, Camera, Shield, User, BellRing, Lock, HelpCircle, Info, ChevronRight, LogOut, Moon, Sun, Link, Mail, Send, Check, X, Users } from 'lucide-react';
 import { ViewState, AuthProvider, UserProfile } from '../types';
 
@@ -7,22 +8,76 @@ interface ProfileViewProps {
   onLogout: () => void;
   isDarkMode: boolean;
   toggleTheme: () => void;
-  authProvider: AuthProvider;
   userProfile: UserProfile | null;
+  // New props for linking functionality
+  connectedProviders: AuthProvider[];
+  onLinkProvider: (provider: AuthProvider) => void;
 }
 
-const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkMode, toggleTheme, authProvider, userProfile }) => {
+// Bot username provided
+const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
+
+const ProfileView: React.FC<ProfileViewProps> = ({ 
+    onNavigate, 
+    onLogout, 
+    isDarkMode, 
+    toggleTheme, 
+    userProfile,
+    connectedProviders,
+    onLinkProvider
+}) => {
   const [showConnections, setShowConnections] = useState(false);
   const [groupsLabel, setGroupsLabel] = useState('Groups');
+  const telegramLinkRef = useRef<HTMLDivElement>(null);
 
   const handleGroupsClick = () => {
     setGroupsLabel('Coming Soon');
     setTimeout(() => setGroupsLabel('Groups'), 2000);
   };
 
-  // Mocking connection state based on login provider
-  const isGoogleConnected = authProvider === 'google';
-  const isTelegramConnected = authProvider === 'telegram';
+  const isGoogleConnected = connectedProviders.includes('google');
+  const isTelegramConnected = connectedProviders.includes('telegram');
+
+  // --- Google Linking Logic ---
+  const linkGoogle = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+        // In a real app, send token to backend to merge accounts.
+        // For now, we just update local state.
+        console.log("Google Linked Successfully", tokenResponse);
+        onLinkProvider('google');
+    },
+    onError: error => console.error('Failed to link Google:', error),
+  });
+
+  // --- Telegram Linking Logic ---
+  useEffect(() => {
+    // Only attempt to render the Telegram widget if the modal is open, 
+    // we aren't connected yet, and the ref exists.
+    if (showConnections && !isTelegramConnected && telegramLinkRef.current) {
+        
+        // Define callback for linking
+        (window as any).onTelegramLink = (user: any) => {
+            console.log("Telegram Linked Successfully", user);
+            onLinkProvider('telegram');
+        };
+
+        // Clear previous content
+        telegramLinkRef.current.innerHTML = '';
+        
+        const script = document.createElement('script');
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.setAttribute('data-telegram-login', TELEGRAM_BOT_USERNAME);
+        script.setAttribute('data-size', 'medium'); // Smaller button for modal
+        script.setAttribute('data-radius', '8');
+        script.setAttribute('data-request-access', 'write');
+        script.setAttribute('data-userpic', 'false');
+        script.setAttribute('data-onauth', 'onTelegramLink(user)'); // Different callback name
+        script.async = true;
+
+        telegramLinkRef.current.appendChild(script);
+    }
+  }, [showConnections, isTelegramConnected, onLinkProvider]);
+
 
   // Determine display name
   // If Telegram gives us a First Name, use it. Otherwise fallback to Username, then default.
@@ -274,7 +329,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                                 <span className="text-xs font-bold">Linked</span>
                              </div>
                         ) : (
-                            <button className="text-xs bg-dark-700 hover:bg-dark-600 text-white font-medium px-3 py-1.5 rounded-lg transition-colors border border-dark-600">
+                            <button 
+                                onClick={() => linkGoogle()}
+                                className="text-xs bg-dark-700 hover:bg-dark-600 text-white font-medium px-3 py-1.5 rounded-lg transition-colors border border-dark-600"
+                            >
                                 Connect
                             </button>
                         )}
@@ -289,7 +347,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                             <div>
                                 <h4 className="text-white font-bold text-sm">Telegram</h4>
                                 {isTelegramConnected ? (
-                                     <p className="text-emerald-400 text-xs font-medium">@{userProfile?.username}</p>
+                                     <p className="text-emerald-400 text-xs font-medium">Linked</p>
                                 ) : (
                                      <p className="text-gray-500 text-xs">Not Connected</p>
                                 )}
@@ -301,9 +359,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, onLogout, isDarkM
                                 <span className="text-xs font-bold">Linked</span>
                              </div>
                         ) : (
-                            <button className="text-xs bg-[#2AABEE]/20 hover:bg-[#2AABEE]/30 text-[#2AABEE] font-medium px-3 py-1.5 rounded-lg transition-colors border border-[#2AABEE]/30">
-                                Connect
-                            </button>
+                            // Telegram Widget Container
+                            <div className="h-[28px] overflow-hidden">
+                                <div ref={telegramLinkRef}></div>
+                            </div>
                         )}
                     </div>
                 </div>
