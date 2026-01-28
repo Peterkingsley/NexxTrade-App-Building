@@ -20,6 +20,7 @@ export interface Signal {
   status: 'active' | 'closed';
   pnl: number;
   timeAgo: string;
+  closedAt?: string; // ISO timestamp for performance charting
   entry: string;
   stopLoss: string;
   tpTargets: { price: string; hit: boolean }[];

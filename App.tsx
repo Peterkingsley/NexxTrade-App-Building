@@ -181,7 +181,7 @@ const App: React.FC = () => {
       case 'signal-history':
         return <SignalHistoryView onBack={handleBack} signals={signals} isLoading={isLoadingSignals} />;
       case 'performance':
-        return <PerformanceView onNavigate={handleNavigate} />;
+        return <PerformanceView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} />;
       case 'academy':
         return <AcademyView onNavigate={handleNavigate} />;
       case 'profile':
