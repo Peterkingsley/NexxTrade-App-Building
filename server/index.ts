@@ -4,37 +4,39 @@ import dotenv from 'dotenv';
 import { query, waitForDatabase } from './db';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// Fix for __dirname in ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS to allow requests from the frontend
+// Enable CORS
 app.use(cors());
 app.use(express.json());
 
-// Helper: Generate a random referral code
+// --- Helper Functions ---
 const generateReferralCode = () => {
     return 'NEXX-' + crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
-// Middleware helper to get User ID from headers (Simple Auth)
 const getUserId = (req: express.Request): string | null => {
     const userId = req.headers['x-user-id'];
     return typeof userId === 'string' ? userId : null;
 };
 
 // --- Database Initialization ---
-// Automatically creates ALL necessary tables based on database.sql schema
 const initDb = async () => {
     try {
         console.log("Initializing database schema...");
         
-        // 1. Enable UUID extension
         await query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"').catch(err => console.log('UUID extension might already exist (skipping)'));
 
-        // 2. Users Table
         await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -55,7 +57,6 @@ const initDb = async () => {
             )
         `);
 
-        // 3. Linked Accounts
         await query(`
             CREATE TABLE IF NOT EXISTS linked_accounts (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -67,7 +68,6 @@ const initDb = async () => {
             )
         `);
 
-        // 4. Signals
         await query(`
             CREATE TABLE IF NOT EXISTS signals (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -92,7 +92,6 @@ const initDb = async () => {
             )
         `);
 
-        // 5. Signal Targets
         await query(`
             CREATE TABLE IF NOT EXISTS signal_targets (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -104,7 +103,6 @@ const initDb = async () => {
             )
         `);
 
-        // 6. Withdrawals
         await query(`
             CREATE TABLE IF NOT EXISTS withdrawals (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -120,7 +118,6 @@ const initDb = async () => {
             )
         `);
 
-        // 7. Notifications (Optional but good for full functionality)
         await query(`
              CREATE TABLE IF NOT EXISTS notifications (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -137,13 +134,11 @@ const initDb = async () => {
         console.log("Database schema verified/updated successfully.");
     } catch (error) {
         console.error("Failed to initialize database:", error);
-        // Do not exit, allow partial functionality or retries on request
     }
 };
 
 // --- API Routes ---
 
-// POST /api/auth/login - Handle Sign Up / Login for Google, Telegram, Email
 app.post('/api/auth/login', async (req, res) => {
     const { provider, email, firstName, lastName, username, photoUrl, providerId } = req.body;
 
@@ -152,13 +147,11 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(400).json({ error: 'Email or Username required' });
         }
 
-        // 1. Check if user exists by Email (for Google/Email) or Username (Telegram)
         let userRes;
         
         if (email) {
             userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
         } else {
-            // Telegram might not provide email, use username match or provider link
             const linkRes = await query('SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2', [provider, providerId]);
             if (linkRes.rows.length > 0) {
                 userRes = await query('SELECT * FROM users WHERE id = $1', [linkRes.rows[0].user_id]);
@@ -172,21 +165,15 @@ app.post('/api/auth/login', async (req, res) => {
         let userData;
 
         if (userRes && userRes.rows.length > 0) {
-            // --- EXISTING USER ---
             userId = userRes.rows[0].id;
             userData = userRes.rows[0];
-            
-            // Update latest info if provided
             await query('UPDATE users SET full_name = COALESCE($1, full_name), photo_url = COALESCE($2, photo_url), updated_at = NOW() WHERE id = $3', 
                 [`${firstName} ${lastName || ''}`.trim(), photoUrl, userId]);
         } else {
-            // --- NEW USER ---
             isNewUser = true;
             const refCode = generateReferralCode();
             const fullName = `${firstName} ${lastName || ''}`.trim();
             const finalEmail = email || `${providerId}@telegram.nexxtrade.com`;
-            
-            // Ensure unique username
             let finalUsername = username || `user_${crypto.randomBytes(4).toString('hex')}`;
             const checkUser = await query('SELECT id FROM users WHERE username = $1', [finalUsername]);
             if (checkUser.rows.length > 0) {
@@ -203,7 +190,6 @@ app.post('/api/auth/login', async (req, res) => {
             userData = insertRes.rows[0];
         }
 
-        // 2. Link Account (Idempotent)
         if (providerId) {
             await query(`
                 INSERT INTO linked_accounts (user_id, provider, provider_user_id)
@@ -228,11 +214,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-
-// GET /api/signals - Fetch all signals with their targets
 app.get('/api/signals', async (req, res) => {
   try {
-    // Robust check for table existence
     const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'signals')");
     if (!checkTable.rows[0].exists) {
         return res.json([]); 
@@ -283,13 +266,11 @@ app.get('/api/signals', async (req, res) => {
   }
 });
 
-// GET /api/referrals/my-stats
 app.get('/api/referrals/my-stats', async (req, res) => {
     try {
         const userId = getUserId(req);
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         
-        // We verify table exists to prevent crash if referral features aren't used yet
         const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'withdrawals')");
         const totalWithdrawn = checkTable.rows[0].exists 
             ? (await query('SELECT COALESCE(SUM(amount), 0) as total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = $2', [userId, 'Completed'])).rows[0].total_withdrawn
@@ -319,7 +300,6 @@ app.get('/api/referrals/my-stats', async (req, res) => {
     }
 });
 
-// GET /api/withdrawals
 app.get('/api/withdrawals', async (req, res) => {
     try {
         const userId = getUserId(req);
@@ -349,7 +329,6 @@ app.get('/api/withdrawals', async (req, res) => {
     }
 });
 
-// POST /api/withdrawals
 app.post('/api/withdrawals', async (req, res) => {
     const { amount, network, address } = req.body;
     try {
@@ -395,35 +374,45 @@ app.post('/api/withdrawals', async (req, res) => {
     }
 });
 
-// Health Check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
-
 // --- SERVE FRONTEND (STATIC FILES) ---
-// This enables the Node server to serve the React app
-const distPath = path.join((process as any).cwd(), 'dist');
-app.use(express.static(distPath));
+// Resolve the 'dist' directory relative to this file
+// server/index.ts is in /server, dist/ is in /dist (parent root)
+const distPath = path.resolve(__dirname, '..', 'dist');
 
-// Catch-all handler: for any request that doesn't match an API route, send back index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
-});
+console.log('Serving static files from:', distPath);
 
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
 
-// --- Server Startup with Retry ---
+    app.get('*', (req, res) => {
+        // Only serve index.html for non-API routes
+        if (!req.path.startsWith('/api')) {
+             res.sendFile(path.join(distPath, 'index.html'));
+        } else {
+             res.status(404).json({ error: 'API route not found' });
+        }
+    });
+} else {
+    console.error('CRITICAL: dist directory not found! Ensure `npm run build` ran successfully.');
+    app.get('*', (req, res) => {
+        res.status(500).send('Server Error: Frontend build not found.');
+    });
+}
+
+// --- Server Startup ---
 const startServer = async () => {
-    // Wait up to 30 seconds (10 attempts * 3s) for DB to be ready
+    // Wait up to 30 seconds for DB to be ready
     const connected = await waitForDatabase(10, 3000);
     
     if (!connected) {
         console.error("CRITICAL: Could not connect to database after multiple attempts. Exiting process.");
-        // We exit with error to let orchestration restart us
         (process as any).exit(1); 
     }
     
-    // Once connected, verify/create schema
     await initDb();
     
     app.listen(PORT, () => {
