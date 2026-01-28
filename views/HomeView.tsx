@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Bell, ChevronRight, Megaphone, Zap, AlertCircle } from 'lucide-react';
+import { MessageSquare, Bell, ChevronRight, Megaphone, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import SignalCard from '../components/SignalCard';
 import { Signal, ViewState } from '../types';
 
 interface HomeViewProps {
   onNavigate: (view: ViewState) => void;
-  mockSignals: Signal[];
+  signals: Signal[];
   livePrices: Record<string, number>;
+  isLoading: boolean;
 }
 
 const ANNOUNCEMENTS = [
@@ -42,7 +43,7 @@ const ANNOUNCEMENTS = [
     }
 ];
 
-const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals, livePrices }) => {
+const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, isLoading }) => {
   const [groupsLabel, setGroupsLabel] = useState('Groups');
   const [activeAnnouncement, setActiveAnnouncement] = useState(0);
 
@@ -69,7 +70,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals, livePrices
             </button>
         </div>
 
-        {/* Desktop Header Content (Can be enhanced) */}
+        {/* Desktop Header Content */}
         <h1 className="hidden md:block text-2xl font-bold text-white ml-2">Dashboard</h1>
         
         <div className="flex items-center gap-3">
@@ -143,7 +144,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals, livePrices
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
                 <p className="text-gray-400 text-sm font-medium mb-1">Active Signals</p>
-                <h3 className="text-3xl font-bold text-white mb-1">12</h3>
+                <h3 className="text-3xl font-bold text-white mb-1">
+                    {isLoading ? '-' : signals.filter(s => s.status === 'active').length}
+                </h3>
                 <p className="text-emerald-400 text-xs font-medium">+3 today</p>
             </div>
             <div className="bg-dark-800 rounded-2xl p-4 border border-dark-700 h-full">
@@ -175,13 +178,27 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, mockSignals, livePrices
                 </button>
             </div>
             
-            <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
-                {mockSignals.slice(0, 3).map((signal, idx) => {
-                     // Construct key for price lookup (e.g. BTC/USDT -> BTCUSDT)
-                     const priceKey = signal.pair.replace('/', '').toUpperCase();
-                     return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
-                })}
-            </div>
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                    <Loader2 className="w-8 h-8 text-brand-green animate-spin" />
+                    <p className="text-gray-500 text-sm">Loading signals...</p>
+                </div>
+            ) : signals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 bg-dark-800 rounded-2xl border border-dark-700 border-dashed">
+                    <div className="w-12 h-12 rounded-full bg-dark-700 flex items-center justify-center mb-3">
+                        <AlertCircle className="text-gray-500" />
+                    </div>
+                    <h3 className="text-white font-bold text-sm">No Active Signals</h3>
+                    <p className="text-gray-500 text-xs mt-1">Check back later for new trades.</p>
+                </div>
+            ) : (
+                <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
+                    {signals.slice(0, 3).map((signal, idx) => {
+                         const priceKey = signal.pair.replace('/', '').toUpperCase();
+                         return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
+                    })}
+                </div>
+            )}
         </div>
       </div>
     </div>

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { MessageSquare, Bell, History } from 'lucide-react';
+import { MessageSquare, Bell, History, Loader2, AlertCircle } from 'lucide-react';
 import SignalCard from '../components/SignalCard';
 import { Signal, ViewState } from '../types';
 
 interface SignalsViewProps {
   onNavigate: (view: ViewState) => void;
-  mockSignals: Signal[];
+  signals: Signal[];
   livePrices: Record<string, number>;
+  isLoading: boolean;
 }
 
-const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals, livePrices }) => {
+const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, signals, livePrices, isLoading }) => {
   const [filter, setFilter] = useState<'All' | 'Active' | 'Closed' | 'Spot'>('All');
   const [groupsLabel, setGroupsLabel] = useState('Groups');
 
@@ -18,7 +19,7 @@ const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals, live
     setTimeout(() => setGroupsLabel('Groups'), 2000);
   };
 
-  const filteredSignals = mockSignals.filter(s => {
+  const filteredSignals = signals.filter(s => {
       if (filter === 'All') return true;
       if (filter === 'Active') return s.status === 'active';
       if (filter === 'Closed') return s.status === 'closed';
@@ -88,14 +89,26 @@ const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, mockSignals, live
       </div>
 
       {/* Signals List */}
-      <div className="px-4 space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
-        {filteredSignals.map((signal, idx) => {
-            const priceKey = signal.pair.replace('/', '').toUpperCase();
-            return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
-        })}
-        {filteredSignals.length === 0 && (
-            <div className="col-span-full py-20 text-center text-gray-500">
-                No signals found for this category.
+      <div className="px-4">
+        {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                <Loader2 className="w-8 h-8 text-brand-green animate-spin" />
+                <p className="text-gray-500 text-sm">Updating signals...</p>
+            </div>
+        ) : filteredSignals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-dark-800/50 rounded-2xl border border-dark-700 border-dashed">
+                <div className="w-16 h-16 rounded-full bg-dark-700 flex items-center justify-center mb-4">
+                    <AlertCircle className="text-gray-500" size={24} />
+                </div>
+                <h3 className="text-white font-bold text-lg">No Signals Found</h3>
+                <p className="text-gray-500 text-sm mt-1">There are no {filter.toLowerCase()} signals available at the moment.</p>
+            </div>
+        ) : (
+            <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
+                {filteredSignals.map((signal, idx) => {
+                    const priceKey = signal.pair.replace('/', '').toUpperCase();
+                    return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
+                })}
             </div>
         )}
       </div>

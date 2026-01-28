@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Search, Filter, ChevronRight, Calendar, TrendingUp, TrendingDown, Target, ShieldCheck, BrainCircuit, X, Clock, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Search, Filter, ChevronRight, Calendar, TrendingUp, TrendingDown, Target, ShieldCheck, BrainCircuit, X, Clock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Signal, ViewState } from '../types';
 
 interface SignalHistoryViewProps {
   onBack: () => void;
   signals: Signal[];
+  isLoading: boolean;
 }
 
-const SignalHistoryView: React.FC<SignalHistoryViewProps> = ({ onBack, signals }) => {
+const SignalHistoryView: React.FC<SignalHistoryViewProps> = ({ onBack, signals, isLoading }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
 
@@ -42,7 +43,9 @@ const SignalHistoryView: React.FC<SignalHistoryViewProps> = ({ onBack, signals }
         <div className="grid grid-cols-2 gap-3">
              <div className="bg-dark-800 p-3 rounded-xl border border-dark-700">
                  <p className="text-gray-400 text-xs mb-1">Total Closed</p>
-                 <p className="text-white font-bold text-lg">{signals.filter(s => s.status === 'closed').length}</p>
+                 <p className="text-white font-bold text-lg">
+                    {isLoading ? '-' : signals.filter(s => s.status === 'closed').length}
+                 </p>
              </div>
              <div className="bg-dark-800 p-3 rounded-xl border border-dark-700">
                  <p className="text-gray-400 text-xs mb-1">Win Rate</p>
@@ -56,7 +59,12 @@ const SignalHistoryView: React.FC<SignalHistoryViewProps> = ({ onBack, signals }
          <h3 className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-3 px-1">Past Signals</h3>
          
          <div className="space-y-3">
-            {historySignals.length > 0 ? (
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                    <Loader2 className="w-6 h-6 text-brand-green animate-spin" />
+                    <p className="text-gray-500 text-sm">Loading history...</p>
+                </div>
+            ) : historySignals.length > 0 ? (
                 historySignals.map((signal) => (
                     <div 
                         key={signal.id}
@@ -94,8 +102,12 @@ const SignalHistoryView: React.FC<SignalHistoryViewProps> = ({ onBack, signals }
                     </div>
                 ))
             ) : (
-                <div className="text-center py-10 text-gray-500">
-                    No closed signals found.
+                <div className="flex flex-col items-center justify-center py-12 bg-dark-800/50 rounded-2xl border border-dark-700 border-dashed text-center">
+                    <div className="w-12 h-12 rounded-full bg-dark-700 flex items-center justify-center mb-3">
+                        <AlertCircle className="text-gray-500" />
+                    </div>
+                    <p className="text-gray-400 font-bold">No History Found</p>
+                    <p className="text-gray-500 text-xs mt-1">There are no closed signals in the database.</p>
                 </div>
             )}
          </div>
