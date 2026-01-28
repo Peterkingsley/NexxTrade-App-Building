@@ -20,8 +20,9 @@ import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile } from './types';
 
 // Configure Axios Base URL
-// In production, this might be the same origin. In dev, we point to the Express server port.
-axios.defaults.baseURL = 'http://localhost:3001';
+// In Production, we use relative paths (empty string) so requests go to the same domain.
+// In Development, we point to localhost:3001
+axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001';
 
 const TOUR_STEPS: TourStep[] = [
     {

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { query, waitForDatabase } from './db';
 import crypto from 'crypto';
+import path from 'path';
 
 dotenv.config();
 
@@ -398,6 +399,18 @@ app.post('/api/withdrawals', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+
+// --- SERVE FRONTEND (STATIC FILES) ---
+// This enables the Node server to serve the React app
+const distPath = path.join((process as any).cwd(), 'dist');
+app.use(express.static(distPath));
+
+// Catch-all handler: for any request that doesn't match an API route, send back index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
 
 // --- Server Startup with Retry ---
 const startServer = async () => {
