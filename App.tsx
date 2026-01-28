@@ -125,15 +125,38 @@ const MOCK_SIGNALS: Signal[] = [
 ];
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>('intro');
+  // --- State Initialization (Lazy Load from LocalStorage) ---
+  
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('nexx_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
+  });
+
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    // If logged in, go home
+    if (localStorage.getItem('nexx_user')) return 'home';
+    // If intro seen, go auth
+    if (localStorage.getItem('nexx_intro_seen')) return 'auth';
+    return 'intro';
+  });
+  
   const [previousView, setPreviousView] = useState<ViewState>('home');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showTour, setShowTour] = useState(false);
   
   // Auth State
-  const [authProvider, setAuthProvider] = useState<AuthProvider>('google');
-  const [connectedProviders, setConnectedProviders] = useState<AuthProvider[]>([]);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [authProvider, setAuthProvider] = useState<AuthProvider>(() => {
+      return (localStorage.getItem('nexx_provider') as AuthProvider) || 'google';
+  });
+  
+  const [connectedProviders, setConnectedProviders] = useState<AuthProvider[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexx_linked');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) { return []; }
+  });
 
   // Signal Data State
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -187,10 +210,15 @@ const App: React.FC = () => {
 
   const handleLogin = (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[], isNewUser?: boolean) => {
     setAuthProvider(provider);
-    // Initialize connectedProviders with what the DB returned, or at least the current provider
-    setConnectedProviders(linkedAccounts || [provider]);
+    const accounts = linkedAccounts || [provider];
+    setConnectedProviders(accounts);
+    
     if (userData) {
       setUserProfile(userData);
+      // Persist Session
+      localStorage.setItem('nexx_user', JSON.stringify(userData));
+      localStorage.setItem('nexx_provider', provider);
+      localStorage.setItem('nexx_linked', JSON.stringify(accounts));
     }
     
     // Only show referral input for new users
@@ -203,8 +231,9 @@ const App: React.FC = () => {
 
   const handleLinkProvider = (provider: AuthProvider) => {
     if (!connectedProviders.includes(provider)) {
-        setConnectedProviders([...connectedProviders, provider]);
-        // In a real app, you would merge user data here
+        const newConnected = [...connectedProviders, provider];
+        setConnectedProviders(newConnected);
+        localStorage.setItem('nexx_linked', JSON.stringify(newConnected));
     }
   };
 
@@ -218,6 +247,11 @@ const App: React.FC = () => {
     setCurrentView('auth');
     setUserProfile(null);
     setConnectedProviders([]);
+    
+    // Clear Session
+    localStorage.removeItem('nexx_user');
+    localStorage.removeItem('nexx_provider');
+    localStorage.removeItem('nexx_linked');
   };
 
   const handleNavigate = (view: ViewState) => {
@@ -241,6 +275,7 @@ const App: React.FC = () => {
   
   const handleIntroComplete = () => {
       setCurrentView('auth');
+      localStorage.setItem('nexx_intro_seen', 'true');
   };
 
   // Views that take full screen without layout wrapper
