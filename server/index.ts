@@ -388,7 +388,9 @@ console.log('Serving static files from:', distPath);
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
 
-    app.get('*', (req, res) => {
+    // Handle React routing, return all requests to React app
+    // Express 5 regex syntax update: use (.*) instead of *
+    app.get('(.*)', (req, res) => {
         // Only serve index.html for non-API routes
         if (!req.path.startsWith('/api')) {
              res.sendFile(path.join(distPath, 'index.html'));
@@ -398,7 +400,7 @@ if (fs.existsSync(distPath)) {
     });
 } else {
     console.error('CRITICAL: dist directory not found! Ensure `npm run build` ran successfully.');
-    app.get('*', (req, res) => {
+    app.get('(.*)', (req, res) => {
         res.status(500).send('Server Error: Frontend build not found.');
     });
 }
