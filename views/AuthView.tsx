@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
+import axios from 'axios';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
@@ -11,6 +13,34 @@ const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Google Login
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        // Fetch user details from Google API using the access token
+        const userInfo = await axios.get(
+          'https://www.googleapis.com/oauth2/v3/userinfo',
+          {
+            headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+          }
+        );
+
+        const profile: UserProfile = {
+          id: userInfo.data.sub,
+          firstName: userInfo.data.given_name,
+          lastName: userInfo.data.family_name,
+          username: userInfo.data.email?.split('@')[0], // Use email prefix as fallback username
+          photoUrl: userInfo.data.picture,
+        };
+
+        onLogin('google', profile);
+      } catch (error) {
+        console.error('Failed to fetch user info:', error);
+      }
+    },
+    onError: errorResponse => console.log('Google Login Failed:', errorResponse),
+  });
 
   useEffect(() => {
     // 1. Define the callback function that Telegram calls upon successful login
@@ -77,7 +107,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         <div className="w-full space-y-4 mb-12">
           {/* Google Button */}
           <button 
-            onClick={() => onLogin('google')}
+            onClick={() => googleLogin()}
             className="w-full bg-gray-200 hover:bg-white text-dark-900 font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
