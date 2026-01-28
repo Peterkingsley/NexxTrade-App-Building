@@ -98,7 +98,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
 
       <div className="p-4 space-y-6">
         {/* Banner Carousel */}
-        <div className="relative rounded-3xl shadow-xl overflow-hidden touch-pan-x h-48 md:h-64">
+        <div className="relative rounded-3xl shadow-xl overflow-hidden touch-pan-x h-40 md:h-48">
              <div 
                 className="flex transition-transform duration-500 ease-in-out h-full"
                 style={{ transform: `translateX(-${activeAnnouncement * 100}%)` }}
@@ -106,16 +106,16 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
                 {ANNOUNCEMENTS.map((item) => {
                     const Icon = item.icon;
                     return (
-                        <div key={item.id} className={`w-full flex-shrink-0 ${item.colorClass} p-5 md:p-10 relative min-w-full flex items-center`}>
+                        <div key={item.id} className={`w-full flex-shrink-0 ${item.colorClass} p-4 md:p-8 relative min-w-full flex items-center`}>
                             <div className="absolute right-0 top-0 w-32 h-32 md:w-64 md:h-64 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                             
-                            <div className="flex items-start gap-4 md:gap-8 relative z-10 w-full max-w-2xl mx-auto">
-                                <div className={`${item.iconBgClass} p-3 md:p-5 rounded-full backdrop-blur-sm shrink-0`}>
-                                    <Icon size={24} fill="currentColor" className="opacity-90 md:w-10 md:h-10" />
+                            <div className="flex items-center gap-4 md:gap-6 relative z-10 w-full max-w-2xl mx-auto">
+                                <div className={`${item.iconBgClass} p-2.5 md:p-4 rounded-full backdrop-blur-sm shrink-0`}>
+                                    <Icon size={20} fill="currentColor" className="opacity-90 md:w-8 md:h-8" />
                                 </div>
                                 <div className="pr-4">
-                                    <h2 className={`${item.textClass} font-bold text-lg md:text-3xl leading-tight mb-2`}>{item.title}</h2>
-                                    <p className={`${item.subTextClass} text-sm md:text-lg font-medium leading-relaxed`}>{item.message}</p>
+                                    <h2 className={`${item.textClass} font-bold text-lg md:text-2xl leading-tight mb-1`}>{item.title}</h2>
+                                    <p className={`${item.subTextClass} text-xs md:text-base font-medium leading-relaxed`}>{item.message}</p>
                                 </div>
                             </div>
                         </div>
@@ -124,7 +124,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
              </div>
 
              {/* Carousel Dots */}
-             <div className="absolute bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+             <div className="absolute bottom-3 md:bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
                 {ANNOUNCEMENTS.map((_, idx) => (
                     <button 
                         key={idx}
