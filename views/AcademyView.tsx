@@ -98,14 +98,8 @@ const AcademyView: React.FC<AcademyViewProps> = ({ onNavigate }) => {
   const [viewMode, setViewMode] = useState<'main' | 'list' | 'detail'>('main');
   const [selectedCategory, setSelectedCategory] = useState<AcademyCategoryType | null>(null);
   const [selectedItem, setSelectedItem] = useState<AcademyItem | null>(null);
-  const [groupsLabel, setGroupsLabel] = useState('Groups');
 
   // --- HANDLERS ---
-  const handleGroupsClick = () => {
-    setGroupsLabel('Coming Soon');
-    setTimeout(() => setGroupsLabel('Groups'), 2000);
-  };
-
   const handleCategoryClick = (category: AcademyCategoryType) => {
       setSelectedCategory(category);
       setViewMode('list');
@@ -147,17 +141,6 @@ const AcademyView: React.FC<AcademyViewProps> = ({ onNavigate }) => {
         <button className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition">
           <MessageSquare size={20} />
         </button>
-        <div className="flex bg-dark-800 rounded-lg p-1 border border-dark-700">
-          <button className="px-4 py-1.5 bg-dark-700 text-white text-xs font-semibold rounded shadow-sm">
-            NexxTrade
-          </button>
-          <button 
-            onClick={handleGroupsClick}
-            className={`px-4 py-1.5 text-xs font-medium transition-all duration-300 ${groupsLabel === 'Coming Soon' ? 'text-brand-green' : 'text-gray-400 hover:text-white'}`}
-          >
-            {groupsLabel}
-          </button>
-        </div>
         <button onClick={() => onNavigate('notifications')} className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition">
           <Bell size={20} />
         </button>

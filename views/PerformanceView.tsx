@@ -15,12 +15,6 @@ type ChartType = 'Area' | 'Line' | 'Bar';
 const PerformanceView: React.FC<PerformanceViewProps> = ({ onNavigate, signals, isLoading }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('All Time');
   const [chartType, setChartType] = useState<ChartType>('Area');
-  const [groupsLabel, setGroupsLabel] = useState('Groups');
-
-  const handleGroupsClick = () => {
-    setGroupsLabel('Coming Soon');
-    setTimeout(() => setGroupsLabel('Groups'), 2000);
-  };
 
   // --- Data Calculation Logic ---
 
@@ -204,17 +198,6 @@ const PerformanceView: React.FC<PerformanceViewProps> = ({ onNavigate, signals, 
         <h1 className="hidden md:block text-2xl font-bold text-white ml-2">Performance Analytics</h1>
 
         <div className="flex items-center gap-3">
-             <div className="flex bg-dark-800 rounded-lg p-1 border border-dark-700 transition-colors duration-300">
-                <button className="px-4 py-1.5 bg-dark-700 text-white text-xs font-semibold rounded shadow-sm">
-                    NexxTrade
-                </button>
-                <button 
-                    onClick={handleGroupsClick}
-                    className={`px-4 py-1.5 text-xs font-medium transition-all duration-300 ${groupsLabel === 'Coming Soon' ? 'text-brand-green' : 'text-gray-400 hover:text-white'}`}
-                >
-                    {groupsLabel}
-                </button>
-            </div>
             <button onClick={() => onNavigate('notifications')} className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition border border-transparent hover:border-dark-700">
                 <Bell size={20} />
             </button>

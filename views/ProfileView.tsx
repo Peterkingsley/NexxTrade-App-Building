@@ -28,13 +28,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({
     onLinkProvider
 }) => {
   const [showConnections, setShowConnections] = useState(false);
-  const [groupsLabel, setGroupsLabel] = useState('Groups');
   const telegramLinkRef = useRef<HTMLDivElement>(null);
-
-  const handleGroupsClick = () => {
-    setGroupsLabel('Coming Soon');
-    setTimeout(() => setGroupsLabel('Groups'), 2000);
-  };
 
   const isGoogleConnected = connectedProviders.includes('google');
   const isTelegramConnected = connectedProviders.includes('telegram');
@@ -132,17 +126,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({
         <button className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition border border-transparent hover:border-dark-700">
           <MessageSquare size={20} />
         </button>
-        <div className="flex bg-dark-800 rounded-lg p-1 border border-dark-700 transition-colors duration-300">
-          <button className="px-4 py-1.5 bg-dark-700 text-white text-xs font-semibold rounded shadow-sm">
-            NexxTrade
-          </button>
-          <button 
-            onClick={handleGroupsClick}
-            className={`px-4 py-1.5 text-xs font-medium transition-all duration-300 ${groupsLabel === 'Coming Soon' ? 'text-brand-green' : 'text-gray-400 hover:text-white'}`}
-          >
-            {groupsLabel}
-          </button>
-        </div>
         <button onClick={() => onNavigate('notifications')} className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition border border-transparent hover:border-dark-700">
           <Bell size={20} />
         </button>
