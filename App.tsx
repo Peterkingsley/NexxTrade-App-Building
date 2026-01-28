@@ -185,15 +185,20 @@ const App: React.FC = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const handleLogin = (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[]) => {
+  const handleLogin = (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[], isNewUser?: boolean) => {
     setAuthProvider(provider);
     // Initialize connectedProviders with what the DB returned, or at least the current provider
     setConnectedProviders(linkedAccounts || [provider]);
     if (userData) {
       setUserProfile(userData);
     }
-    // Instead of going straight to home, go to referral input
-    setCurrentView('referral-input');
+    
+    // Only show referral input for new users
+    if (isNewUser) {
+        setCurrentView('referral-input');
+    } else {
+        setCurrentView('home');
+    }
   };
 
   const handleLinkProvider = (provider: AuthProvider) => {
