@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
 
@@ -11,6 +11,7 @@ const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // 1. Define the callback function that Telegram calls upon successful login
@@ -40,11 +41,10 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
     script.setAttribute('data-onauth', 'onTelegramAuth(user)');
     script.async = true;
 
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-        // Clear the container to remove the fallback button before appending the widget
-        container.innerHTML = '';
-        container.appendChild(script);
+    // Append to a specific wrapper, but don't clear the whole container if it destroys the fallback
+    if (telegramWrapperRef.current) {
+        telegramWrapperRef.current.innerHTML = ''; // Clear previous instances of the widget only
+        telegramWrapperRef.current.appendChild(script);
     }
 
     return () => {
@@ -91,21 +91,22 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             Continue with Google
           </button>
 
-          {/* Telegram Login Widget Container */}
-          <div className="w-full flex justify-center min-h-[54px] relative">
-             <div id="telegram-login-container" className="flex justify-center w-full">
-                {/* Fallback button shown if JS is disabled or domain not whitelisted yet */}
-                <button 
-                    onClick={() => {
-                        // Fallback simulated login
-                        onLogin('telegram');
-                    }}
-                    className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
-                >
-                    <Send className="w-5 h-5" fill="currentColor" />
-                    Continue with Telegram
-                </button>
-             </div>
+          {/* Telegram Login Area */}
+          <div className="w-full flex flex-col items-center gap-4">
+             {/* The container where the official widget injects its button */}
+             <div ref={telegramWrapperRef} className="flex justify-center min-h-[40px] w-full" />
+             
+             {/* Fallback button - Always visible for now, or you could hide it if you detect the widget loaded, but that's tricky across browsers */}
+             <button 
+                onClick={() => {
+                    // This is a fallback manual login for testing/demo or if widget fails
+                    onLogin('telegram');
+                }}
+                className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-semibold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-colors shadow-lg shadow-blue-900/20"
+            >
+                <Send className="w-5 h-5" fill="currentColor" />
+                Continue with Telegram (Demo)
+            </button>
           </div>
         </div>
 
