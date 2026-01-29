@@ -30,6 +30,22 @@ const getUserId = (req: express.Request): string | null => {
     return typeof userId === 'string' ? userId : null;
 };
 
+const ensureAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const result = await query('SELECT role FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
+            return res.status(403).json({ error: 'Forbidden: Admins only' });
+        }
+        next();
+    } catch (error) {
+        console.error('Admin Check Error:', error);
+        res.status(500).json({ error: 'Server error during auth check' });
+    }
+};
+
 // --- Database Initialization ---
 const initDb = async () => {
     try {
@@ -138,6 +154,24 @@ const initDb = async () => {
                 link_url TEXT,
                 is_read BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+
+        // Academy Tables
+        await query(`
+            CREATE TABLE IF NOT EXISTS academy_items (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                title VARCHAR(255) NOT NULL,
+                category VARCHAR(50) NOT NULL,
+                type VARCHAR(20) NOT NULL,
+                thumbnail_url TEXT,
+                author_name VARCHAR(100),
+                duration_display VARCHAR(50),
+                description_short TEXT,
+                content_html TEXT,
+                video_url TEXT,
+                is_featured BOOLEAN DEFAULT FALSE,
+                published_at TIMESTAMPTZ DEFAULT NOW()
             )
         `);
 
@@ -259,6 +293,7 @@ app.post('/api/auth/login', async (req, res) => {
             lastName: lastName,
             username: userData.username,
             photoUrl: userData.photo_url,
+            role: userData.role, // Return Role
             referralCode: userData.referral_code,
             notificationPreferences: userData.notification_preferences, // Return preferences
             isNewUser,
@@ -568,6 +603,106 @@ app.post('/api/withdrawals', async (req, res) => {
         res.status(500).json({ error: 'Transaction failed' });
     }
 });
+
+// --- ADMIN ROUTES ---
+
+// Create Signal
+app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
+    const { pair, type, side, entry, stopLoss, analysis, targets } = req.body;
+    const userId = getUserId(req);
+
+    if (!pair || !entry || !stopLoss || !targets || !Array.isArray(targets)) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        await query('BEGIN');
+        const signalRes = await query(`
+            INSERT INTO signals (pair, type, side, entry_price_display, stop_loss_price, analysis_text, created_by, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+            RETURNING id
+        `, [pair, type, side, entry, stopLoss, analysis, userId]);
+
+        const signalId = signalRes.rows[0].id;
+
+        for (let i = 0; i < targets.length; i++) {
+            await query(`
+                INSERT INTO signal_targets (signal_id, target_price, target_order, is_hit)
+                VALUES ($1, $2, $3, false)
+            `, [signalId, targets[i], i + 1]);
+        }
+
+        await query('COMMIT');
+        res.json({ success: true, signalId });
+    } catch (error) {
+        await query('ROLLBACK');
+        console.error('Create Signal Error:', error);
+        res.status(500).json({ error: 'Failed to create signal' });
+    }
+});
+
+// Close Signal
+app.put('/api/admin/signals/:id/close', ensureAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { pnl } = req.body;
+
+    try {
+        await query(`
+            UPDATE signals 
+            SET status = 'closed', pnl_percentage = $1, closed_at = NOW()
+            WHERE id = $2
+        `, [pnl, id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Close Signal Error:', error);
+        res.status(500).json({ error: 'Failed to close signal' });
+    }
+});
+
+// Delete Signal
+app.delete('/api/admin/signals/:id', ensureAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await query('DELETE FROM signals WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete Signal Error:', error);
+        res.status(500).json({ error: 'Failed to delete signal' });
+    }
+});
+
+// Post Academy Content
+app.post('/api/admin/academy', ensureAdmin, async (req, res) => {
+    const { title, category, type, duration, author, description, content, videoUrl } = req.body;
+
+    try {
+        await query(`
+            INSERT INTO academy_items (title, category, type, duration_display, author_name, description_short, content_html, video_url)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [title, category, type, duration, author, description, content, videoUrl]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Post Academy Error:', error);
+        res.status(500).json({ error: 'Failed to post content' });
+    }
+});
+
+// Send Notification
+app.post('/api/admin/notifications', ensureAdmin, async (req, res) => {
+    const { title, message, type } = req.body;
+    // user_id NULL means global
+    try {
+        await query(`
+            INSERT INTO notifications (type, title, message, user_id)
+            VALUES ($1, $2, $3, NULL)
+        `, [type, title, message]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Send Notification Error:', error);
+        res.status(500).json({ error: 'Failed to send notification' });
+    }
+});
+
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });

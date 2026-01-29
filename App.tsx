@@ -15,6 +15,7 @@ import SubscriptionView from './views/SubscriptionView';
 import ReferralsView from './views/ReferralsView';
 import IntroView from './views/IntroView';
 import ReferralInputView from './views/ReferralInputView';
+import AdminView from './views/AdminView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile } from './types';
@@ -203,7 +204,7 @@ const App: React.FC = () => {
     };
 
     fetchSignals();
-  }, []);
+  }, [currentView]); // Re-fetch when view changes (e.g. creating a signal in admin)
 
   // --- Live Pricing Integration ---
   // Extract unique pairs from fetched signals to subscribe to
@@ -354,6 +355,8 @@ const App: React.FC = () => {
         return <SubscriptionView onBack={handleBack} userProfile={userProfile} />;
       case 'referrals':
         return <ReferralsView onBack={handleBack} userProfile={userProfile} />;
+      case 'admin':
+        return <AdminView onNavigate={handleNavigate} />;
       default:
         return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} />;
     }

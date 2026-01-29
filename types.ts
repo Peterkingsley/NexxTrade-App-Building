@@ -1,6 +1,6 @@
 
 
-export type ViewState = 'intro' | 'auth' | 'referral-input' | 'home' | 'signals' | 'signal-history' | 'performance' | 'academy' | 'profile' | 'notifications' | 'subscription' | 'notification-settings' | 'referrals';
+export type ViewState = 'intro' | 'auth' | 'referral-input' | 'home' | 'signals' | 'signal-history' | 'performance' | 'academy' | 'profile' | 'notifications' | 'subscription' | 'notification-settings' | 'referrals' | 'admin';
 
 export type AuthProvider = 'google' | 'telegram';
 
@@ -18,6 +18,7 @@ export interface UserProfile {
   lastName?: string;
   username?: string;
   photoUrl?: string;
+  role?: 'user' | 'admin' | 'analyst';
   notificationPreferences?: NotificationPreferences;
 }
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Activity, BarChart2, BookOpen, User, LogOut } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Activity, BarChart2, BookOpen, User, LogOut, Shield } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -24,6 +24,16 @@ const NexxLogoIcon = ({ size = 24, className = "" }: { size?: number | string, c
 );
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout }) => {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('nexx_user');
+    if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === 'admin') setIsAdmin(true);
+    }
+  }, []);
+
   const navItems = [
     { id: 'home', label: 'Home', icon: NexxLogoIcon },
     { id: 'signals', label: 'Signals', icon: Activity },
@@ -63,6 +73,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout }) => 
             </button>
           );
         })}
+
+        {isAdmin && (
+            <button
+              onClick={() => setView('admin')}
+              className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 mt-6 border border-red-500/20 ${
+                currentView === 'admin' 
+                  ? 'bg-red-500/10 text-red-500' 
+                  : 'text-gray-400 hover:bg-dark-700 hover:text-white'
+              }`}
+            >
+              <Shield size={20} />
+              <span className={`font-medium ${currentView === 'admin' ? 'font-bold' : ''}`}>Admin Panel</span>
+            </button>
+        )}
       </div>
 
       <div className="p-4 border-t border-dark-700">
