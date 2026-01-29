@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Gift, ArrowRight, CheckCircle2, Ticket } from 'lucide-react';
 import { UserProfile } from '../types';
@@ -13,6 +13,18 @@ const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // Auto-fill from local storage if captured from URL
+  useEffect(() => {
+      const pendingCode = localStorage.getItem('nexx_referral_pending');
+      if (pendingCode) {
+          setCode(pendingCode.toUpperCase());
+      }
+  }, []);
+
+  const clearPending = () => {
+      localStorage.removeItem('nexx_referral_pending');
+  };
+
   const handleSubmit = async () => {
     if (!code.trim()) return;
     
@@ -24,6 +36,7 @@ const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userP
                  headers: { 'x-user-id': userProfile.id }
             });
             setSuccess(true);
+            clearPending();
              // Auto advance after success animation
             setTimeout(() => {
                 onComplete();
@@ -31,6 +44,7 @@ const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userP
         } else {
             // Fallback (UI only, though likely won't happen if auth is required to reach this)
              setSuccess(true);
+             clearPending();
              setTimeout(onComplete, 1500);
         }
     } catch (error: any) {
@@ -38,6 +52,11 @@ const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userP
     } finally {
         setIsSubmitting(false);
     }
+  };
+
+  const handleSkip = () => {
+      clearPending();
+      onComplete();
   };
 
   return (
@@ -111,7 +130,7 @@ const ReferralInputView: React.FC<ReferralInputViewProps> = ({ onComplete, userP
             </button>
 
             <button
-                onClick={onComplete}
+                onClick={handleSkip}
                 className="w-full py-3 text-sm text-gray-500 font-medium hover:text-white transition-colors"
             >
                 I don't have a code, skip for now

@@ -163,6 +163,23 @@ const App: React.FC = () => {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [isLoadingSignals, setIsLoadingSignals] = useState<boolean>(true);
 
+  // --- Referral Link Handling ---
+  useEffect(() => {
+    // Check if the user landed via a referral link: /ref/CODE
+    const path = window.location.pathname;
+    if (path.startsWith('/ref/')) {
+        const segments = path.split('/');
+        // Path is like ["", "ref", "CODE"]
+        const code = segments[2];
+        if (code) {
+            console.log("Captured Referral Code:", code);
+            localStorage.setItem('nexx_referral_pending', code);
+            // Clean the URL so the user feels like they are on the homepage
+            window.history.replaceState(null, '', '/');
+        }
+    }
+  }, []);
+
   // Fetch Signals from Database (via API)
   useEffect(() => {
     const fetchSignals = async () => {
