@@ -7,10 +7,10 @@ export const useBinancePrices = (pairs: string[]) => {
 
   useEffect(() => {
     // 1. Format pairs for Binance stream (e.g., "BTC/USDT" -> "btcusdt")
-    // Filter out pairs that are "Locked" or invalid
+    // Filter out pairs that are "Locked" or invalid or too short to be a pair
     const formattedPairs = pairs
       .map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, ''))
-      .filter((p) => p && !p.includes('locked'));
+      .filter((p) => p && !p.includes('locked') && p.length > 3);
 
     if (formattedPairs.length === 0) return;
 
@@ -19,11 +19,16 @@ export const useBinancePrices = (pairs: string[]) => {
         const streams = formattedPairs.map((p) => `${p}@aggTrade`).join('/');
         const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
+        // Close existing connection if any
+        if (wsRef.current) {
+            wsRef.current.close();
+        }
+
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log('Connected to Binance Live Prices');
+          // console.log('Connected to Binance Live Prices');
         };
 
         ws.onmessage = (event) => {
@@ -35,7 +40,7 @@ export const useBinancePrices = (pairs: string[]) => {
                 const price = parseFloat(message.data.p);
 
                 setPrices((prev) => {
-                     // Simple optimization to avoid rerenders if price is identical (unlikely with floats but good practice)
+                     // Simple optimization to avoid rerenders if price is identical
                      if (prev[symbol] === price) return prev;
                      return { ...prev, [symbol]: price };
                 });
@@ -46,12 +51,12 @@ export const useBinancePrices = (pairs: string[]) => {
         };
 
         ws.onclose = () => {
-            console.log('Binance WS disconnected. Reconnecting...');
+            // console.log('Binance WS disconnected. Reconnecting...');
             reconnectTimeout.current = setTimeout(connect, 3000);
         };
 
         ws.onerror = (err) => {
-            console.error('Binance WS Error:', err);
+            console.error('Binance WS Error (Price Feed):', err);
             ws.close();
         };
     };

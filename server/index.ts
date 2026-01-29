@@ -24,7 +24,7 @@ app.use(express.json());
 
 // --- Web Push Configuration ---
 // Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
-const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '...';
 
 // We try to generate keys dynamically if they are clearly placeholders or missing
@@ -90,13 +90,17 @@ const monitorPrices = async () => {
         const signals = activeSignalsRes.rows;
         
         // 2. Get Unique Symbols for API Call (e.g., "BTC/USDT" -> "BTCUSDT")
-        const pairs = [...new Set(signals.map((s: any) => s.pair.replace('/', '').toUpperCase()))];
+        // Remove special chars to match Binance format
+        const pairs = [...new Set(signals.map((s: any) => s.pair.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()))];
         
+        if (pairs.length === 0) return;
+
         // 3. Fetch Prices from Binance
         // Note: Binance requires symbols in format ["BTCUSDT","ETHUSDT"]
         const symbolsParam = JSON.stringify(pairs);
-        // Using encodeURIComponent to handle the brackets/quotes in URL correctly
         const url = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbolsParam)}`;
+        
+        // console.log(`Fetching prices for: ${symbolsParam}`);
         
         const priceRes = await axios.get(url);
         const prices: Record<string, number> = {};
@@ -119,14 +123,15 @@ const monitorPrices = async () => {
         };
 
         for (const signal of signals) {
-            const symbol = signal.pair.replace('/', '').toUpperCase();
+            const symbol = signal.pair.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
             const currentPrice = prices[symbol];
             
             if (!currentPrice) continue;
 
             // Parse Numbers
-            const entry = parseFloat(signal.entry_price_display.replace(/,/g, '').split('-')[0]);
-            const stopLoss = parseFloat(signal.stop_loss_price.replace(/,/g, ''));
+            // Remove commas and take first number of range "2000-2050"
+            const entry = parseFloat(signal.entry_price_display.replace(/,/g, '').split('-')[0].trim());
+            const stopLoss = parseFloat(signal.stop_loss_price.replace(/,/g, '').trim());
             const leverage = parseInt(signal.leverage?.match(/\d+/)?.[0] || '1');
             
             if (isNaN(entry)) continue;
@@ -139,16 +144,21 @@ const monitorPrices = async () => {
                 pnl = ((entry - currentPrice) / entry) * 100 * leverage;
             }
 
+            // Limit decimal places to 2 for storage
+            // const formattedPnl = parseFloat(pnl.toFixed(2));
+
             // Update PnL in DB
             await query('UPDATE signals SET pnl_percentage = $1 WHERE id = $2', [pnl, signal.id]);
 
             // --- B. Check Stop Loss ---
             let slHit = false;
-            if (signal.side === 'Long' && currentPrice <= stopLoss) slHit = true;
-            if (signal.side === 'Short' && currentPrice >= stopLoss) slHit = true;
+            if (!isNaN(stopLoss)) {
+                if (signal.side === 'Long' && currentPrice <= stopLoss) slHit = true;
+                if (signal.side === 'Short' && currentPrice >= stopLoss) slHit = true;
+            }
 
             if (slHit) {
-                console.log(`SL Hit for ${signal.pair}`);
+                console.log(`SL Hit for ${signal.pair} at ${currentPrice}`);
                 await query("UPDATE signals SET status = 'closed', closed_at = NOW() WHERE id = $1", [signal.id]);
                 // Notify
                 await query("INSERT INTO notifications (type, title, message) VALUES ($1, $2, $3)", ['Signal', 'Stop Loss Hit', `${signal.pair} hit SL at ${currentPrice}. PnL: ${pnl.toFixed(2)}%`]);
@@ -167,7 +177,7 @@ const monitorPrices = async () => {
                     continue;
                 }
 
-                const tpPrice = parseFloat(target.target_price.replace(/,/g, ''));
+                const tpPrice = parseFloat(target.target_price.replace(/,/g, '').trim());
                 if (isNaN(tpPrice)) continue;
 
                 let hit = false;
@@ -179,21 +189,23 @@ const monitorPrices = async () => {
                     updatedTargets = true;
                     highestTargetHit = Math.max(highestTargetHit, target.target_order);
                     
+                    console.log(`TP${target.target_order} Hit for ${signal.pair} at ${currentPrice}`);
+
                     // Notify TP Hit
                     await query("INSERT INTO notifications (type, title, message) VALUES ($1, $2, $3)", ['Signal', 'Take Profit Hit', `${signal.pair} hit TP${target.target_order} at ${currentPrice}.`]);
                     sendBroadcast('Take Profit Hit', `${signal.pair} Target ${target.target_order} reached!`);
                 }
             }
 
-            // Auto-close if all targets hit (optional, usually people trail SL, but let's close for simplicity or if final TP)
-            if (updatedTargets && highestTargetHit === targets.length) {
+            // Auto-close if all targets hit
+            if (updatedTargets && highestTargetHit === targets.length && targets.length > 0) {
                  await query("UPDATE signals SET status = 'closed', closed_at = NOW() WHERE id = $1", [signal.id]);
                  sendBroadcast('Trade Completed', `${signal.pair} has hit all targets!`);
             }
         }
 
     } catch (e) {
-        console.error("Price Monitor Error:", e);
+        console.error("Price Monitor Error:", (e as Error).message);
     }
 };
 
