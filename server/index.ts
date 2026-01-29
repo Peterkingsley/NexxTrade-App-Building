@@ -53,16 +53,18 @@ const initDb = async () => {
                 referred_by UUID REFERENCES users(id),
                 wallet_balance DECIMAL(15, 2) DEFAULT 0.00,
                 is_email_verified BOOLEAN DEFAULT FALSE,
+                notification_preferences JSONB DEFAULT '{"allSignals": true, "announcement": true, "tp": true, "sl": true, "academy": false}',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
         `);
 
-        // Migration: Add telegram_id if it doesn't exist (for existing databases)
+        // Migration: Add telegram_id and notification_preferences if they don't exist
         try {
             await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id VARCHAR(255) UNIQUE`);
+            await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_preferences JSONB DEFAULT '{"allSignals": true, "announcement": true, "tp": true, "sl": true, "academy": false}'`);
         } catch (e) {
-            console.log('Note: telegram_id column check/update', (e as Error).message);
+            console.log('Note: column check/update', (e as Error).message);
         }
 
         await query(`
@@ -258,6 +260,7 @@ app.post('/api/auth/login', async (req, res) => {
             username: userData.username,
             photoUrl: userData.photo_url,
             referralCode: userData.referral_code,
+            notificationPreferences: userData.notification_preferences, // Return preferences
             isNewUser,
             linkedProviders
         });
@@ -265,6 +268,40 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (error) {
         console.error('Auth Error:', error);
         res.status(500).json({ error: 'Authentication failed' });
+    }
+});
+
+// GET Notification Settings
+app.get('/api/user/settings/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const result = await query('SELECT notification_preferences FROM users WHERE id = $1', [userId]);
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].notification_preferences);
+        } else {
+            res.status(404).json({ error: 'User not found' });
+        }
+    } catch (error) {
+        console.error('Fetch Settings Error:', error);
+        res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+});
+
+// UPDATE Notification Settings
+app.put('/api/user/settings/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const preferences = req.body;
+
+    try {
+        await query('UPDATE users SET notification_preferences = $1 WHERE id = $2', [JSON.stringify(preferences), userId]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Update Settings Error:', error);
+        res.status(500).json({ error: 'Failed to update settings' });
     }
 });
 

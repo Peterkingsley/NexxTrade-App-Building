@@ -18,6 +18,7 @@ import ReferralInputView from './views/ReferralInputView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile } from './types';
+import { requestNotificationPermission, sendLocalNotification } from './utils/notificationService';
 
 // Configure Axios Base URL
 // In Production, we use relative paths (empty string) so requests go to the same domain.
@@ -208,7 +209,7 @@ const App: React.FC = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const handleLogin = (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[], isNewUser?: boolean) => {
+  const handleLogin = async (provider: AuthProvider, userData?: UserProfile, linkedAccounts?: AuthProvider[], isNewUser?: boolean) => {
     setAuthProvider(provider);
     const accounts = linkedAccounts || [provider];
     setConnectedProviders(accounts);
@@ -226,6 +227,20 @@ const App: React.FC = () => {
         setCurrentView('referral-input');
     } else {
         setCurrentView('home');
+    }
+
+    // --- WELCOME NOTIFICATION TRIGGER ---
+    // Ask for permission and show welcome notification
+    try {
+        const granted = await requestNotificationPermission();
+        if (granted) {
+            sendLocalNotification(
+                "Welcome to NexxTrade!",
+                `Hello ${userData?.firstName || 'Trader'}, you are now connected to real-time signals.`
+            );
+        }
+    } catch (e) {
+        console.log("Notification trigger failed", e);
     }
   };
 

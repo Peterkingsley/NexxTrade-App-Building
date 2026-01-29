@@ -4,12 +4,21 @@ export type ViewState = 'intro' | 'auth' | 'referral-input' | 'home' | 'signals'
 
 export type AuthProvider = 'google' | 'telegram';
 
+export interface NotificationPreferences {
+  allSignals: boolean;
+  announcement: boolean;
+  tp: boolean;
+  sl: boolean;
+  academy: boolean;
+}
+
 export interface UserProfile {
   id?: string;
   firstName?: string;
   lastName?: string;
   username?: string;
   photoUrl?: string;
+  notificationPreferences?: NotificationPreferences;
 }
 
 export interface Signal {
