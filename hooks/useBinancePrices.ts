@@ -1,79 +1,132 @@
 import { useState, useEffect, useRef } from 'react';
 
+// CoinGecko ID Map for common assets
+const COIN_GECKO_MAP: Record<string, string> = {
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'SOL': 'solana',
+    'XRP': 'ripple',
+    'BNB': 'binancecoin',
+    'ADA': 'cardano',
+    'DOGE': 'dogecoin',
+    'DOT': 'polkadot',
+    'MATIC': 'matic-network',
+    'LTC': 'litecoin',
+    'AVAX': 'avalanche-2',
+    'LINK': 'chainlink',
+    'UNI': 'uniswap',
+    'ATOM': 'cosmos',
+    'XLM': 'stellar',
+    'ALGO': 'algorand'
+};
+
+const POLLING_INTERVAL = 15000; // 15 seconds (Safe for CoinGecko Free Tier)
+
 export const useBinancePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeout = useRef<any>(null);
+  
+  // Refs for lifecycle management
+  const isMountedRef = useRef<boolean>(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // 1. Format pairs for Binance stream (e.g., "BTC/USDT" -> "btcusdt")
-    // Filter out pairs that are "Locked" or invalid or too short to be a pair
-    const formattedPairs = pairs
-      .map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, ''))
-      .filter((p) => p && !p.includes('locked') && p.length > 3);
+    isMountedRef.current = true;
+    
+    // 1. Map Pairs to CoinGecko IDs
+    // Input: ["BTC/USDT", "ETH/USDT"] -> IDs: ["bitcoin", "ethereum"]
+    const requestedIds: string[] = [];
+    const idToSymbolMap: Record<string, string> = {};
 
-    if (formattedPairs.length === 0) return;
-
-    const connect = () => {
-        // Use aggTrade for real-time trade data
-        const streams = formattedPairs.map((p) => `${p}@aggTrade`).join('/');
+    pairs.forEach(pair => {
+        const rawSymbol = pair.split('/')[0].toUpperCase(); // "BTC"
+        const geckoId = COIN_GECKO_MAP[rawSymbol];
         
-        // Use default port (443) instead of 9443 to avoid firewall blocks
-        const wsUrl = `wss://stream.binance.com/stream?streams=${streams}`;
-
-        // Close existing connection if any
-        if (wsRef.current) {
-            wsRef.current.close();
+        if (geckoId) {
+            requestedIds.push(geckoId);
+            // Map "bitcoin" back to "BTCUSDT" for the app to consume
+            idToSymbolMap[geckoId] = `${rawSymbol}USDT`;
         }
+    });
 
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+    // If no valid pairs, exit
+    if (requestedIds.length === 0) return;
 
-        ws.onopen = () => {
-          // console.log('Connected to Binance Live Prices');
-        };
+    const fetchPrices = async () => {
+        // Strict Lifecycle Check
+        if (!isMountedRef.current) return;
 
-        ws.onmessage = (event) => {
-          try {
-              const message = JSON.parse(event.data);
-              // aggTrade format: { stream: "btcusdt@aggTrade", data: { s: "BTCUSDT", p: "123.45", ... } }
-              if (message.data && message.data.s && message.data.p) {
-                const symbol = message.data.s; 
-                const price = parseFloat(message.data.p);
+        // Create abort controller for this specific request
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+        abortControllerRef.current = new AbortController();
 
-                setPrices((prev) => {
-                     // Simple optimization to avoid rerenders if price is identical
-                     if (prev[symbol] === price) return prev;
-                     return { ...prev, [symbol]: price };
-                });
-              }
-          } catch (e) {
-              // Ignore parse errors
-          }
-        };
+        try {
+            const idsParam = requestedIds.join(',');
+            const url = `https://api.coingecko.com/api/v3/simple/price?ids=${idsParam}&vs_currencies=usd`;
 
-        ws.onclose = () => {
-            // console.log('Binance WS disconnected. Reconnecting...');
-            reconnectTimeout.current = setTimeout(connect, 3000);
-        };
+            const response = await fetch(url, {
+                signal: abortControllerRef.current.signal,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
 
-        ws.onerror = (err) => {
-            console.error('Binance WS Error (Price Feed):', err);
-            ws.close();
-        };
+            // Exponential Backoff Handling
+            if (response.status === 429) {
+                console.warn("CoinGecko Rate Limit Hit (429). Backing off.");
+                throw new Error('RATE_LIMIT');
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP_ERROR_${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Transform Data: { "bitcoin": { "usd": 95000 } } -> { "BTCUSDT": 95000 }
+            const newPrices: Record<string, number> = {};
+            
+            Object.keys(data).forEach(geckoId => {
+                const appSymbol = idToSymbolMap[geckoId];
+                if (appSymbol && data[geckoId].usd) {
+                    newPrices[appSymbol] = data[geckoId].usd;
+                }
+            });
+
+            if (isMountedRef.current) {
+                setPrices(prev => ({ ...prev, ...newPrices }));
+                retryCountRef.current = 0; // Reset backoff on success
+                
+                // Schedule next poll
+                timeoutRef.current = setTimeout(fetchPrices, POLLING_INTERVAL);
+            }
+
+        } catch (error: any) {
+            if (error.name === 'AbortError') return;
+
+            // Calculate Backoff: 2s, 4s, 8s, 16s... Max 60s
+            const delay = Math.min(2000 * (2 ** retryCountRef.current), 60000);
+            retryCountRef.current += 1;
+
+            console.log(`Price Fetch Error: ${error.message}. Retrying in ${delay}ms...`);
+
+            if (isMountedRef.current) {
+                timeoutRef.current = setTimeout(fetchPrices, delay);
+            }
+        }
     };
 
-    connect();
+    // Start Polling
+    fetchPrices();
 
+    // Cleanup Function
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
+        isMountedRef.current = false;
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [JSON.stringify(pairs)]); 
+  }, [JSON.stringify(pairs)]); // Deep compare pairs
 
   return prices;
 };
