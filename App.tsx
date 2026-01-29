@@ -21,9 +21,8 @@ import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile, NotificationItem } from './types';
 import { requestNotificationPermission, sendLocalNotification, subscribeToPushNotifications } from './utils/notificationService';
 
-// NOTE: Axios baseURL is NOT set here. 
-// We rely on the Vite Proxy (in vite.config.ts) to forward /api requests to http://localhost:3001
-// This prevents CORS issues and "Network Error" in development environments.
+// Configure Axios Base URL
+axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001';
 
 const TOUR_STEPS: TourStep[] = [
     {
@@ -226,8 +225,7 @@ const App: React.FC = () => {
           setSignals(MOCK_SIGNALS);
         }
       } catch (error) {
-        // Silent error for background polls to reduce noise
-        if (!isBackground) console.error("Signal fetch failed, using fallback.");
+        console.error("Signal fetch failed", error);
         if (signals.length === 0) setSignals(MOCK_SIGNALS);
       } finally {
         if (!isBackground) setIsLoadingSignals(false);
@@ -293,7 +291,7 @@ const App: React.FC = () => {
               }
 
           } catch (e) {
-              // Ignore notification errors
+              console.error("Notification fetch failed", e);
           }
       };
 

@@ -24,7 +24,7 @@ app.use(express.json());
 
 // --- Web Push Configuration ---
 // Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
-const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '...';
 
 // We try to generate keys dynamically if they are clearly placeholders or missing
@@ -74,9 +74,6 @@ const ensureAdmin = async (req: express.Request, res: express.Response, next: ex
 };
 
 // --- PRICE MONITORING ENGINE ---
-// In-Memory Cache for Proxy Endpoint
-const priceCache: Record<string, number> = {};
-
 const monitorPrices = async () => {
     try {
         // 1. Fetch Active Signals with their Targets
@@ -103,16 +100,14 @@ const monitorPrices = async () => {
         const symbolsParam = JSON.stringify(pairs);
         const url = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbolsParam)}`;
         
-        // Add timeout to prevent server hanging
-        const priceRes = await axios.get(url, { timeout: 5000 });
+        // console.log(`Fetching prices for: ${symbolsParam}`);
+        
+        const priceRes = await axios.get(url);
         const prices: Record<string, number> = {};
         
         if (Array.isArray(priceRes.data)) {
             priceRes.data.forEach((p: any) => {
-                const val = parseFloat(p.price);
-                prices[p.symbol] = val;
-                // Update Cache
-                priceCache[p.symbol] = val;
+                prices[p.symbol] = parseFloat(p.price);
             });
         }
 
@@ -148,6 +143,9 @@ const monitorPrices = async () => {
             } else {
                 pnl = ((entry - currentPrice) / entry) * 100 * leverage;
             }
+
+            // Limit decimal places to 2 for storage
+            // const formattedPnl = parseFloat(pnl.toFixed(2));
 
             // Update PnL in DB
             await query('UPDATE signals SET pnl_percentage = $1 WHERE id = $2', [pnl, signal.id]);
@@ -207,8 +205,7 @@ const monitorPrices = async () => {
         }
 
     } catch (e) {
-        // Suppress generic network errors in loop
-        // console.error("Price Monitor Error:", (e as Error).message);
+        console.error("Price Monitor Error:", (e as Error).message);
     }
 };
 
@@ -369,11 +366,6 @@ const initDb = async () => {
 
 // --- API Routes ---
 
-// Proxy Price Endpoint (For Frontend Fallback)
-app.get('/api/prices/proxy', (req, res) => {
-    res.json(priceCache);
-});
-
 // GET Public VAPID Key for Frontend
 app.get('/api/push/vapid-public-key', (req, res) => {
     res.json({ publicKey: vapidKeys.publicKey });
@@ -492,3 +484,579 @@ app.post('/api/auth/login', async (req, res) => {
             if (provider === 'telegram' && providerId) {
                 updateFields.push(`telegram_id = COALESCE($${valueIndex++}, telegram_id)`);
                 updateValues.push(providerId.toString());
+            }
+
+            updateFields.push(`updated_at = NOW()`);
+            
+            // Add ID for WHERE clause
+            updateValues.push(userId);
+
+            const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${valueIndex}`;
+            await query(updateQuery, updateValues);
+
+        } else {
+            isNewUser = true;
+            const refCode = generateReferralCode();
+            const fullName = `${firstName} ${lastName || ''}`.trim();
+            const finalEmail = email || `${providerId}@telegram.nexxtrade.com`;
+            let finalUsername = username || `user_${crypto.randomBytes(4).toString('hex')}`;
+            const checkUser = await query('SELECT id FROM users WHERE username = $1', [finalUsername]);
+            if (checkUser.rows.length > 0) {
+                finalUsername = `${finalUsername}_${Math.floor(Math.random() * 1000)}`;
+            }
+
+            const insertRes = await query(`
+                INSERT INTO users (email, full_name, username, photo_url, referral_code, wallet_balance, is_email_verified, telegram_id)
+                VALUES ($1, $2, $3, $4, $5, 0.00, $6, $7)
+                RETURNING *
+            `, [
+                finalEmail, 
+                fullName, 
+                finalUsername, 
+                photoUrl, 
+                refCode, 
+                provider === 'google',
+                (provider === 'telegram' && providerId) ? providerId.toString() : null
+            ]);
+            
+            userId = insertRes.rows[0].id;
+            userData = insertRes.rows[0];
+        }
+
+        if (providerId) {
+            await query(`
+                INSERT INTO linked_accounts (user_id, provider, provider_user_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (provider, provider_user_id) DO NOTHING
+            `, [userId, provider, providerId.toString()]);
+        }
+
+        // Fetch all linked accounts for this user to return in login response
+        const linkedRes = await query('SELECT provider FROM linked_accounts WHERE user_id = $1', [userId]);
+        const linkedProviders = linkedRes.rows.map(r => r.provider);
+
+        res.json({
+            id: userData.id,
+            firstName: firstName,
+            lastName: lastName,
+            username: userData.username,
+            photoUrl: userData.photo_url,
+            role: userData.role, // Return Role
+            referralCode: userData.referral_code,
+            notificationPreferences: userData.notification_preferences, // Return preferences
+            isNewUser,
+            linkedProviders
+        });
+
+    } catch (error) {
+        console.error('Auth Error:', error);
+        res.status(500).json({ error: 'Authentication failed' });
+    }
+});
+
+// GET Notification Settings
+app.get('/api/user/settings/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const result = await query('SELECT notification_preferences FROM users WHERE id = $1', [userId]);
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].notification_preferences);
+        } else {
+            res.status(404).json({ error: 'User not found' });
+        }
+    } catch (error) {
+        console.error('Fetch Settings Error:', error);
+        res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+});
+
+// UPDATE Notification Settings
+app.put('/api/user/settings/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const preferences = req.body;
+
+    try {
+        await query('UPDATE users SET notification_preferences = $1 WHERE id = $2', [JSON.stringify(preferences), userId]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Update Settings Error:', error);
+        res.status(500).json({ error: 'Failed to update settings' });
+    }
+});
+
+// GET All Notifications (Global + User Specific)
+app.get('/api/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    // If user is logged in, fetch global (NULL) and their specific notifications
+    // If not logged in, fetch only global announcements
+    
+    const params = userId ? [userId] : [];
+    const queryText = userId 
+        ? `SELECT * FROM notifications WHERE user_id IS NULL OR user_id = $1 ORDER BY created_at DESC LIMIT 50`
+        : `SELECT * FROM notifications WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 50`;
+
+    try {
+        const result = await query(queryText, params);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Fetch Notifications Error:', error);
+        res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+});
+
+// New endpoint to link an account from profile settings (enforces uniqueness)
+app.post('/api/user/link-account', async (req, res) => {
+    const userId = getUserId(req);
+    const { provider, providerId } = req.body;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!provider || !providerId) return res.status(400).json({ error: 'Missing provider data' });
+
+    try {
+        // Check if this provider account is already linked
+        const existing = await query(
+            'SELECT user_id FROM linked_accounts WHERE provider = $1 AND provider_user_id = $2',
+            [provider, providerId.toString()]
+        );
+
+        if (existing.rows.length > 0) {
+            const linkedUserId = existing.rows[0].user_id;
+            if (linkedUserId === userId) {
+                // Linked to self: Idempotent success
+                return res.json({ success: true, message: 'Account already linked' });
+            } else {
+                // Linked to someone else: Conflict
+                return res.status(409).json({ error: 'Account linked to another user' });
+            }
+        }
+
+        // Perform Link
+        await query(
+            'INSERT INTO linked_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)',
+            [userId, provider, providerId.toString()]
+        );
+        
+        // Also update the users table if it's telegram
+        if (provider === 'telegram') {
+            await query('UPDATE users SET telegram_id = $1 WHERE id = $2 AND telegram_id IS NULL', [providerId.toString(), userId]);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Link Account Error:', error);
+        res.status(500).json({ error: 'Failed to link account' });
+    }
+});
+
+// GET Subscription Details
+app.get('/api/user/subscription', async (req, res) => {
+    try {
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const result = await query('SELECT subscription_plan, subscription_expiry FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const user = result.rows[0];
+        
+        res.json({
+            plan: user.subscription_plan,
+            expiry: user.subscription_expiry
+        });
+    } catch (error) {
+        console.error('Error fetching subscription:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Claim Referral Code Endpoint
+app.post('/api/referrals/claim', async (req, res) => {
+    const userId = getUserId(req);
+    const { code } = req.body;
+    
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!code) return res.status(400).json({ error: 'Code required' });
+
+    try {
+        // Find referrer
+        const referrerRes = await query('SELECT id FROM users WHERE referral_code = $1', [code]);
+        if (referrerRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Invalid referral code' });
+        }
+        
+        const referrerId = referrerRes.rows[0].id;
+
+        // Prevent self-referral
+        if (referrerId === userId) {
+            return res.status(400).json({ error: 'Cannot refer yourself' });
+        }
+
+        // Check if already referred
+        const userRes = await query('SELECT referred_by FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length > 0 && userRes.rows[0].referred_by) {
+            return res.status(400).json({ error: 'Already referred' });
+        }
+
+        // Update user
+        await query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
+        
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error('Referral Claim Error:', error);
+        res.status(500).json({ error: 'Failed to claim referral' });
+    }
+});
+
+app.get('/api/signals', async (req, res) => {
+  try {
+    const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'signals')");
+    if (!checkTable.rows[0].exists) {
+        return res.json([]); 
+    }
+
+    const result = await query(`
+      SELECT 
+        s.id, s.pair, s.type, s.side, s.leverage, s.status, 
+        s.pnl_percentage as pnl,
+        s.entry_price_display as entry,
+        s.stop_loss_price as "stopLoss",
+        s.is_sl_unlocked as "slUnlock",
+        s.analysis_text as analysis,
+        s.risk_management_text as "riskManagement",
+        s.created_at,
+        s.closed_at as "closedAt",
+        COALESCE(
+          (SELECT json_agg(json_build_object('price', st.target_price, 'hit', st.is_hit) ORDER BY st.target_order)
+           FROM signal_targets st WHERE st.signal_id = s.id), '[]'::json
+        ) as "tpTargets"
+      FROM signals s
+      ORDER BY s.created_at DESC
+    `);
+
+    const signals = result.rows.map(row => {
+      const diffMs = new Date().getTime() - new Date(row.created_at).getTime();
+      const diffMins = Math.round(diffMs / 60000);
+      const diffHours = Math.round(diffMs / 3600000);
+      const diffDays = Math.round(diffMs / 86400000);
+      
+      let timeAgo = 'Just now';
+      if (diffDays > 0) timeAgo = `${diffDays}d ago`;
+      else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
+      else if (diffMins > 0) timeAgo = `${diffMins}m ago`;
+
+      return {
+        ...row,
+        pnl: Number(row.pnl),
+        tpTargets: row.tpTargets,
+        timeAgo
+      };
+    });
+
+    res.json(signals);
+  } catch (error) {
+    console.error('Error fetching signals:', error);
+    res.status(500).json({ error: 'Failed to fetch signals' });
+  }
+});
+
+app.get('/api/referrals/my-stats', async (req, res) => {
+    try {
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        
+        const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'withdrawals')");
+        const totalWithdrawn = checkTable.rows[0].exists 
+            ? (await query('SELECT COALESCE(SUM(amount), 0) as total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = $2', [userId, 'Completed'])).rows[0].total_withdrawn
+            : 0;
+
+        const [userRes, refRes] = await Promise.all([
+            query('SELECT wallet_balance, referral_code FROM users WHERE id = $1', [userId]),
+            query('SELECT COUNT(*) as count FROM users WHERE referred_by = $1', [userId])
+        ]);
+
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const user = userRes.rows[0];
+        const referralCount = parseInt(refRes.rows[0].count);
+        const pendingBalance = parseFloat(user.wallet_balance);
+        const totalEarnings = pendingBalance + parseFloat(totalWithdrawn);
+
+        res.json({
+            pendingBalance,
+            totalEarnings,
+            totalReferrals: referralCount,
+            referralCode: user.referral_code
+        });
+    } catch (error) {
+        console.error('Error fetching referral stats:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/withdrawals', async (req, res) => {
+    try {
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const checkTable = await query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'withdrawals')");
+        if (!checkTable.rows[0].exists) return res.json([]);
+
+        const result = await query('SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY requested_at DESC', [userId]);
+        
+        const withdrawals = result.rows.map(row => ({
+            id: row.id,
+            amount: parseFloat(row.amount),
+            date: new Date(row.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            status: row.status,
+            chain: row.network,
+            address: row.wallet_address,
+            txHash: row.tx_hash,
+            timeRequested: new Date(row.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timeSent: row.processed_at ? new Date(row.processed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined
+        }));
+        
+        res.json(withdrawals);
+    } catch (error) {
+        console.error('Error fetching withdrawals:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/withdrawals', async (req, res) => {
+    const { amount, network, address } = req.body;
+    try {
+        const userId = getUserId(req);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        
+        const userRes = await query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const currentBalance = parseFloat(userRes.rows[0].wallet_balance);
+        
+        if (currentBalance < amount) {
+            return res.status(400).json({ error: 'Insufficient balance' });
+        }
+
+        await query('BEGIN');
+        await query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [amount, userId]);
+        const insertRes = await query(`
+            INSERT INTO withdrawals (user_id, amount, network, wallet_address, status)
+            VALUES ($1, $2, $3, $4, 'Pending')
+            RETURNING *
+        `, [userId, amount, network, address]);
+        await query('COMMIT');
+        
+        const row = insertRes.rows[0];
+        const newWithdrawal = {
+            id: row.id,
+            amount: parseFloat(row.amount),
+            date: new Date(row.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            status: row.status,
+            chain: row.network,
+            address: row.wallet_address,
+            txHash: row.tx_hash,
+            timeRequested: new Date(row.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        res.json(newWithdrawal);
+
+    } catch (error) {
+        await query('ROLLBACK');
+        console.error('Error creating withdrawal:', error);
+        res.status(500).json({ error: 'Transaction failed' });
+    }
+});
+
+// --- ADMIN ROUTES ---
+
+// Create Signal (Send Push)
+app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
+    const { pair, type, side, leverage, entry, stopLoss, analysis, targets } = req.body;
+    const userId = getUserId(req);
+
+    if (!pair || !entry || !stopLoss || !targets || !Array.isArray(targets)) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        await query('BEGIN');
+        const signalRes = await query(`
+            INSERT INTO signals (pair, type, side, leverage, entry_price_display, stop_loss_price, analysis_text, created_by, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+            RETURNING id
+        `, [pair, type, side, leverage, entry, stopLoss, analysis, userId]);
+
+        const signalId = signalRes.rows[0].id;
+
+        for (let i = 0; i < targets.length; i++) {
+            await query(`
+                INSERT INTO signal_targets (signal_id, target_price, target_order, is_hit)
+                VALUES ($1, $2, $3, false)
+            `, [signalId, targets[i], i + 1]);
+        }
+
+        // Send Push Notification for Signal
+        // In a real app, optimize this to batch send
+        const subsRes = await query('SELECT keys, endpoint FROM push_subscriptions');
+        const notificationPayload = JSON.stringify({
+            title: `New Signal: ${pair} ${side}`,
+            body: `${type} Trade. Entry: ${entry}`,
+            icon: '/logo.png'
+        });
+
+        subsRes.rows.forEach(sub => {
+            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, notificationPayload)
+                .catch(err => console.error("Push Error", err));
+        });
+
+        await query('COMMIT');
+        res.json({ success: true, signalId });
+    } catch (error) {
+        await query('ROLLBACK');
+        console.error('Create Signal Error:', error);
+        res.status(500).json({ error: 'Failed to create signal' });
+    }
+});
+
+// Close Signal
+app.put('/api/admin/signals/:id/close', ensureAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { pnl } = req.body;
+
+    try {
+        await query(`
+            UPDATE signals 
+            SET status = 'closed', pnl_percentage = $1, closed_at = NOW()
+            WHERE id = $2
+        `, [pnl, id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Close Signal Error:', error);
+        res.status(500).json({ error: 'Failed to close signal' });
+    }
+});
+
+// Delete Signal
+app.delete('/api/admin/signals/:id', ensureAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await query('DELETE FROM signals WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete Signal Error:', error);
+        res.status(500).json({ error: 'Failed to delete signal' });
+    }
+});
+
+// Post Academy Content
+app.post('/api/admin/academy', ensureAdmin, async (req, res) => {
+    const { title, category, type, duration, author, description, content, videoUrl } = req.body;
+
+    try {
+        await query(`
+            INSERT INTO academy_items (title, category, type, duration_display, author_name, description_short, content_html, video_url)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [title, category, type, duration, author, description, content, videoUrl]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Post Academy Error:', error);
+        res.status(500).json({ error: 'Failed to post content' });
+    }
+});
+
+// Send Notification (Broadcast with Push)
+app.post('/api/admin/notifications', ensureAdmin, async (req, res) => {
+    const { title, message, type } = req.body;
+    // user_id NULL means global
+    try {
+        // 1. Save to Database
+        await query(`
+            INSERT INTO notifications (type, title, message, user_id)
+            VALUES ($1, $2, $3, NULL)
+        `, [type, title, message]);
+
+        // 2. Broadcast via Web Push
+        const subsRes = await query('SELECT keys, endpoint FROM push_subscriptions');
+        const notificationPayload = JSON.stringify({
+            title: title,
+            body: message,
+            icon: '/logo.png'
+        });
+
+        // Fire and forget push sending
+        subsRes.rows.forEach(sub => {
+            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, notificationPayload)
+                .catch(err => {
+                    // 410 Gone means subscription is invalid/expired
+                    if (err.statusCode === 410) {
+                         query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(console.error);
+                    }
+                });
+        });
+
+        res.json({ success: true, count: subsRes.rowCount });
+    } catch (error) {
+        console.error('Send Notification Error:', error);
+        res.status(500).json({ error: 'Failed to send notification' });
+    }
+});
+
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// --- SERVE FRONTEND (STATIC FILES) ---
+// Resolve the 'dist' directory relative to this file
+// server/index.ts is in /server, dist/ is in /dist (parent root)
+const distPath = path.resolve(__dirname, '..', 'dist');
+
+console.log('Serving static files from:', distPath);
+
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+
+    // Handle React routing, return all requests to React app
+    // Use Regex /.*/ to match all routes, avoiding Express 5 string path syntax issues
+    app.get(/.*/, (req, res) => {
+        // Only serve index.html for non-API routes
+        if (!req.path.startsWith('/api')) {
+             res.sendFile(path.join(distPath, 'index.html'));
+        } else {
+             res.status(404).json({ error: 'API route not found' });
+        }
+    });
+} else {
+    console.error('CRITICAL: dist directory not found! Ensure `npm run build` ran successfully.');
+    app.get(/.*/, (req, res) => {
+        res.status(500).send('Server Error: Frontend build not found.');
+    });
+}
+
+// --- Server Startup ---
+const startServer = async () => {
+    // Wait up to 30 seconds for DB to be ready
+    const connected = await waitForDatabase(10, 3000);
+    
+    if (!connected) {
+        console.error("CRITICAL: Could not connect to database after multiple attempts. Exiting process.");
+        (process as any).exit(1); 
+    }
+    
+    await initDb();
+    
+    // Start Background Service
+    setInterval(monitorPrices, 10000); // 10s interval
+    console.log("Price Monitor Service Started.");
+
+    app.listen(PORT, () => {
+      console.log(`API Server running on http://localhost:${PORT}`);
+    });
+};
+
+startServer();
