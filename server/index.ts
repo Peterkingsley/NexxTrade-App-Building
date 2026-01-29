@@ -385,6 +385,26 @@ app.put('/api/user/settings/notifications', async (req, res) => {
     }
 });
 
+// GET All Notifications (Global + User Specific)
+app.get('/api/notifications', async (req, res) => {
+    const userId = getUserId(req);
+    // If user is logged in, fetch global (NULL) and their specific notifications
+    // If not logged in, fetch only global announcements
+    
+    const params = userId ? [userId] : [];
+    const queryText = userId 
+        ? `SELECT * FROM notifications WHERE user_id IS NULL OR user_id = $1 ORDER BY created_at DESC LIMIT 50`
+        : `SELECT * FROM notifications WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 50`;
+
+    try {
+        const result = await query(queryText, params);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Fetch Notifications Error:', error);
+        res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+});
+
 // New endpoint to link an account from profile settings (enforces uniqueness)
 app.post('/api/user/link-account', async (req, res) => {
     const userId = getUserId(req);

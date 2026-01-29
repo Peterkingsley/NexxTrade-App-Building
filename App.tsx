@@ -18,7 +18,7 @@ import ReferralInputView from './views/ReferralInputView';
 import AdminView from './views/AdminView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import { useBinancePrices } from './hooks/useBinancePrices';
-import { ViewState, Signal, AuthProvider, UserProfile } from './types';
+import { ViewState, Signal, AuthProvider, UserProfile, NotificationItem } from './types';
 import { requestNotificationPermission, sendLocalNotification } from './utils/notificationService';
 
 // Configure Axios Base URL
@@ -160,8 +160,9 @@ const App: React.FC = () => {
     } catch (e) { return []; }
   });
 
-  // Signal Data State
+  // Data State
   const [signals, setSignals] = useState<Signal[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoadingSignals, setIsLoadingSignals] = useState<boolean>(true);
 
   // --- Profile Refresh ---
@@ -214,7 +215,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Fetch Signals from Database (via API)
+  // --- Fetch Signals ---
   useEffect(() => {
     const fetchSignals = async () => {
       setIsLoadingSignals(true);
@@ -238,6 +239,71 @@ const App: React.FC = () => {
 
     fetchSignals();
   }, [currentView]); // Re-fetch when view changes (e.g. creating a signal in admin)
+
+  // --- Helper: Time Ago ---
+  const calculateTimeAgo = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
+
+  // --- Notification Polling & Alerting ---
+  useEffect(() => {
+      // Don't poll if not logged in
+      if (!userProfile?.id) return;
+
+      const fetchNotifications = async () => {
+          try {
+              const res = await axios.get('/api/notifications', {
+                  headers: { 'x-user-id': userProfile.id }
+              });
+              
+              const rawData = res.data;
+              // Transform DB format to UI format
+              const formatted: NotificationItem[] = rawData.map((n: any) => ({
+                  id: n.id,
+                  type: n.type,
+                  title: n.title,
+                  message: n.message,
+                  read: n.is_read || false,
+                  timeAgo: calculateTimeAgo(n.created_at)
+              }));
+              
+              setNotifications(formatted);
+
+              // Check for new notifications to trigger browser alert
+              if (rawData.length > 0) {
+                  const latest = rawData[0]; // Assuming sorted by created_at DESC
+                  const latestId = latest.id;
+                  const lastSeenId = localStorage.getItem('nexx_last_notification_id');
+                  
+                  // If we have a new top notification ID that we haven't seen
+                  if (latestId !== lastSeenId) {
+                      localStorage.setItem('nexx_last_notification_id', latestId);
+                      sendLocalNotification(latest.title, latest.message);
+                  }
+              }
+
+          } catch (e) {
+              console.error("Notification fetch failed", e);
+          }
+      };
+
+      // Initial Fetch
+      fetchNotifications();
+
+      // Poll every 30 seconds
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+  }, [userProfile?.id]);
 
   // --- Live Pricing Integration ---
   // Extract unique pairs from fetched signals to subscribe to
@@ -313,6 +379,7 @@ const App: React.FC = () => {
     setCurrentView('auth');
     setUserProfile(null);
     setConnectedProviders([]);
+    setNotifications([]); // Clear notifications on logout
     
     // Clear Session
     localStorage.removeItem('nexx_user');
@@ -361,7 +428,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'home':
-        return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} />;
+        return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} notifications={notifications} />;
       case 'signals':
         return <SignalsView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} />;
       case 'signal-history':
@@ -381,7 +448,7 @@ const App: React.FC = () => {
             onLinkProvider={handleLinkProvider}
         />;
       case 'notifications':
-        return <NotificationsView onBack={handleBack} />;
+        return <NotificationsView onBack={handleBack} notifications={notifications} />;
       case 'notification-settings':
         return <NotificationSettingsView onBack={handleBack} />;
       case 'subscription':
@@ -391,7 +458,7 @@ const App: React.FC = () => {
       case 'admin':
         return <AdminView onNavigate={handleNavigate} />;
       default:
-        return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} />;
+        return <HomeView onNavigate={handleNavigate} signals={signals} isLoading={isLoadingSignals} livePrices={livePrices} notifications={notifications} />;
     }
   };
 

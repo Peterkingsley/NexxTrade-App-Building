@@ -1,18 +1,32 @@
 import React from 'react';
 import { ArrowLeft, Settings, Megaphone, Bell, BookOpen, User } from 'lucide-react';
-import { ViewState } from '../types';
+import { ViewState, NotificationItem } from '../types';
 
 interface NotificationsViewProps {
   onBack: () => void;
+  notifications?: NotificationItem[];
 }
 
-const NotificationsView: React.FC<NotificationsViewProps> = ({ onBack }) => {
-  const notifications = [
-    { type: 'Announcement', title: 'Announcement', desc: 'NexxTrade is partnering with binance to....', time: '2h ago', icon: Megaphone, color: 'emerald' },
-    { type: 'Signal', title: 'Signal Alert', desc: 'BTC?....', time: '10h ago', icon: Bell, color: 'emerald' },
-    { type: 'Academy', title: 'Academy', desc: 'New Article: how to use risk mangagem.....', time: '18/05/25', icon: BookOpen, color: 'emerald' },
-    { type: 'Account', title: 'Account', desc: 'Login attempt from new IP', time: '12/12/25', icon: User, color: 'emerald' },
-  ];
+const NotificationsView: React.FC<NotificationsViewProps> = ({ onBack, notifications = [] }) => {
+  
+  const getIcon = (type: string) => {
+      switch (type) {
+          case 'Announcement': return Megaphone;
+          case 'Signal': return Bell;
+          case 'Academy': return BookOpen;
+          case 'Account': return User;
+          default: return Bell;
+      }
+  };
+
+  const getColor = (type: string) => {
+      switch (type) {
+          case 'Announcement': return 'bg-blue-500';
+          case 'Signal': return 'bg-yellow-500';
+          case 'Academy': return 'bg-purple-500';
+          default: return 'bg-emerald-500';
+      }
+  };
 
   return (
     <div className="min-h-screen bg-dark-900 pb-10">
@@ -27,23 +41,32 @@ const NotificationsView: React.FC<NotificationsViewProps> = ({ onBack }) => {
       </div>
 
       <div className="p-4 space-y-4">
-        {notifications.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-                <div key={idx} className="flex items-center gap-4 py-2 border-b border-dark-800 last:border-0 pb-4 last:pb-0">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                        <Icon className="text-white" size={24} fill="currentColor" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start mb-0.5">
-                            <h3 className="text-white font-bold text-base truncate pr-2">{item.title}</h3>
-                            <span className="text-gray-500 text-xs whitespace-nowrap">{item.time}</span>
+        {notifications.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+                <Bell size={48} className="mx-auto mb-4 opacity-20" />
+                <p>No notifications yet</p>
+            </div>
+        ) : (
+            notifications.map((item) => {
+                const Icon = getIcon(item.type);
+                const bgClass = getColor(item.type);
+                
+                return (
+                    <div key={item.id} className="flex items-start gap-4 py-2 border-b border-dark-800 last:border-0 pb-4 last:pb-0 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className={`w-12 h-12 rounded-full ${bgClass} flex items-center justify-center shrink-0 mt-1`}>
+                            <Icon className="text-white" size={24} fill="currentColor" />
                         </div>
-                        <p className="text-gray-400 text-sm truncate">{item.desc}</p>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start mb-0.5">
+                                <h3 className="text-white font-bold text-base truncate pr-2">{item.title}</h3>
+                                <span className="text-gray-500 text-xs whitespace-nowrap">{item.timeAgo}</span>
+                            </div>
+                            <p className="text-gray-400 text-sm leading-relaxed">{item.message}</p>
+                        </div>
                     </div>
-                </div>
-            )
-        })}
+                )
+            })
+        )}
       </div>
     </div>
   );

@@ -1,58 +1,56 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Bell, ChevronRight, Megaphone, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import SignalCard from '../components/SignalCard';
-import { Signal, ViewState } from '../types';
+import { Signal, ViewState, NotificationItem } from '../types';
 
 interface HomeViewProps {
   onNavigate: (view: ViewState) => void;
   signals: Signal[];
   livePrices: Record<string, number>;
   isLoading: boolean;
+  notifications?: NotificationItem[];
 }
 
-const ANNOUNCEMENTS = [
-    {
-        id: 1,
-        title: "BTC Breaking Major Resistance",
-        message: "Watch $99k level closely. High volume confirmation needed.",
-        icon: Megaphone,
-        colorClass: "bg-brand-green",
-        textClass: "text-dark-900",
-        subTextClass: "text-dark-900/80",
-        iconBgClass: "bg-white/20 text-dark-900"
-    },
-    {
-        id: 2,
-        title: "New AI Analysis Tool",
-        message: "We've updated our algorithm for higher accuracy on scalps.",
-        icon: Zap,
-        colorClass: "bg-purple-600",
-        textClass: "text-white",
-        subTextClass: "text-white/80",
-        iconBgClass: "bg-white/20 text-white"
-    },
-    {
-        id: 3,
-        title: "System Maintenance",
-        message: "Scheduled upgrades this Sunday at 02:00 UTC (30 mins).",
-        icon: AlertCircle,
-        colorClass: "bg-blue-600",
-        textClass: "text-white",
-        subTextClass: "text-white/80",
-        iconBgClass: "bg-white/20 text-white"
-    }
-];
+const DEFAULT_ANNOUNCEMENT = {
+    id: 'welcome',
+    title: "Welcome to NexxTrade",
+    message: "Your premium dashboard is ready. Check signals for new trades.",
+    icon: Megaphone,
+    colorClass: "bg-brand-green",
+    textClass: "text-dark-900",
+    subTextClass: "text-dark-900/80",
+    iconBgClass: "bg-white/20 text-dark-900"
+};
 
-const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, isLoading }) => {
+const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, isLoading, notifications = [] }) => {
   const [groupsLabel, setGroupsLabel] = useState('Groups');
   const [activeAnnouncement, setActiveAnnouncement] = useState(0);
 
+  // Filter for Announcements or fallback
+  const announcementList = useMemo(() => {
+      const filtered = notifications.filter(n => n.type === 'Announcement');
+      
+      if (filtered.length === 0) return [DEFAULT_ANNOUNCEMENT];
+
+      return filtered.map((n, index) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          icon: Megaphone,
+          // Alternate colors based on index
+          colorClass: index % 2 === 0 ? "bg-brand-green" : "bg-blue-600",
+          textClass: index % 2 === 0 ? "text-dark-900" : "text-white",
+          subTextClass: index % 2 === 0 ? "text-dark-900/80" : "text-white/80",
+          iconBgClass: index % 2 === 0 ? "bg-white/20 text-dark-900" : "bg-white/20 text-white"
+      }));
+  }, [notifications]);
+
   useEffect(() => {
     const interval = setInterval(() => {
-        setActiveAnnouncement((prev) => (prev + 1) % ANNOUNCEMENTS.length);
+        setActiveAnnouncement((prev) => (prev + 1) % announcementList.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [announcementList.length]);
 
   const handleGroupsClick = () => {
     setGroupsLabel('Coming Soon');
@@ -72,7 +70,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
         if (s.created_at) {
             return new Date(s.created_at).getTime() >= startOfDay;
         }
-        // Fallback for mock data if needed, though production should use created_at
         return false;
     }).length;
 
@@ -134,7 +131,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
                 className="text-white p-2 bg-dark-800 rounded-xl hover:bg-dark-700 transition relative"
             >
             <Bell size={20} />
-            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-dark-800"></span>
+            {notifications.length > 0 && !notifications[0].read && (
+                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-dark-800"></span>
+            )}
             </button>
         </div>
       </div>
@@ -146,7 +145,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
                 className="flex transition-transform duration-500 ease-in-out h-full"
                 style={{ transform: `translateX(-${activeAnnouncement * 100}%)` }}
              >
-                {ANNOUNCEMENTS.map((item) => {
+                {announcementList.map((item) => {
                     const Icon = item.icon;
                     return (
                         <div key={item.id} className={`w-full flex-shrink-0 ${item.colorClass} p-4 md:p-8 relative min-w-full flex items-center`}>
@@ -168,7 +167,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
 
              {/* Carousel Dots */}
              <div className="absolute bottom-3 md:bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
-                {ANNOUNCEMENTS.map((_, idx) => (
+                {announcementList.map((_, idx) => (
                     <button 
                         key={idx}
                         onClick={() => setActiveAnnouncement(idx)}
