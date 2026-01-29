@@ -46,7 +46,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   };
 
   const { displayPnl, displayTpTargets, displayStatus, isSlHit, isTpSecured } = useMemo(() => {
-      // Default to database values
+      // Default to database values (Back-end calculated PnL)
       let currentPnl = signal.pnl;
       let currentTpTargets = signal.tpTargets;
       let currentStatus = signal.status;
