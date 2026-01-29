@@ -245,32 +245,36 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
             </div>
         )}
 
-        {/* Header - Optimized for mobile */}
+        {/* Header - REFACTORED FOR BETTER LAYOUT */}
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-            <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">{signal.pair}</h3>
-            <div className="flex gap-1.5 mt-0.5 sm:mt-0 flex-wrap">
-                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-red-500/10 text-red-400 border-red-500/10'}`}>
+          {/* Left Side: Pair & Badges */}
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-xl font-bold text-white leading-tight tracking-tight">{signal.pair}</h3>
+            
+            <div className="flex gap-1.5 flex-wrap items-center">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
                     {signal.side}
                 </span>
+                
                 {signal.type === 'Futures' && signal.leverage && (
-                    <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border bg-yellow-500/10 text-yellow-500 border-yellow-500/10">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-yellow-500/10 text-yellow-500 border-yellow-500/20 uppercase tracking-wide">
                         {signal.leverage}
                     </span>
                 )}
-                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${statusColorClass}`}>
+                
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${statusColorClass}`}>
                     {displayStatus}
                 </span>
             </div>
           </div>
           
+          {/* Right Side: PnL & Price */}
           <div className="flex flex-col items-end shrink-0">
-             <span className={`text-xl sm:text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
+             <span className={`text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
                 {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
              </span>
-             {/* Live Price Display */}
              {livePrice && (
-                 <div className={`flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-300 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
+                 <div className={`flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-300 mt-0.5 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
                      {formatPrice(livePrice)}
                      {priceDirection === 'up' && <TrendingUp size={10} />}
                      {priceDirection === 'down' && <TrendingDown size={10} />}
