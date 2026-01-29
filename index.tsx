@@ -9,7 +9,7 @@ if (!rootElement) {
 }
 
 // User provided Google Client ID
-const GOOGLE_CLIENT_ID = "711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "136183391358-ouh0df8oo36erbmottovdvvir7b0dh2f.apps.googleusercontent.com";
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
