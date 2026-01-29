@@ -28,9 +28,21 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       return parseFloat(clean);
   };
 
-  const calculatePnl = (entry: number, exit: number, side: 'Long' | 'Short') => {
-      if (side === 'Long') return ((exit - entry) / entry) * 100;
-      return ((entry - exit) / entry) * 100;
+  // Helper to extract numeric leverage (e.g., "Cross 20x" -> 20)
+  const getLeverage = (leverageStr?: string, type?: string) => {
+      if (type === 'Spot' || !leverageStr) return 1;
+      const match = leverageStr.match(/(\d+)/);
+      return match ? parseInt(match[0], 10) : 1;
+  };
+
+  const calculatePnl = (entry: number, exit: number, side: 'Long' | 'Short', leverage: number) => {
+      let rawPercent;
+      if (side === 'Long') {
+          rawPercent = ((exit - entry) / entry) * 100;
+      } else {
+          rawPercent = ((entry - exit) / entry) * 100;
+      }
+      return rawPercent * leverage;
   };
 
   const { displayPnl, displayTpTargets, displayStatus, isSlHit, isTpSecured } = useMemo(() => {
@@ -45,6 +57,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       if (livePrice && !isLocked && signal.status === 'active') {
           const entryPrice = parsePrice(signal.entry);
           const stopLossPrice = parsePrice(signal.stopLoss);
+          const leverage = getLeverage(signal.leverage, signal.type);
 
           if (!isNaN(entryPrice)) {
               // 1. Calculate Derived TP Hits (DB + Live)
@@ -83,7 +96,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                   const finalTp = currentTpTargets[currentTpTargets.length - 1];
                   // If all TPs hit, ROI is the last TP
                   const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
-                  currentPnl = calculatePnl(entryPrice, priceToUse, signal.side);
+                  currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
               } else if (liveSlHit) {
                   // SL is physically hit
                   if (isAnyTpHit) {
@@ -94,17 +107,17 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                       // Calculate PnL based on highest TP Hit (Secured Profit)
                       const maxTp = currentTpTargets[maxTpHitIndex];
                       const priceToUse = !isNaN(parsePrice(maxTp.price)) ? parsePrice(maxTp.price) : entryPrice;
-                      currentPnl = calculatePnl(entryPrice, priceToUse, signal.side);
+                      currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
                   } else {
                       // Pure Loss (No TP hit)
                       slHit = true;
                       currentStatus = 'SL Hit';
-                      currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side);
+                      currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side, leverage);
                   }
               } else {
                   // Trade Active - Floating PnL
                   currentStatus = 'active';
-                  currentPnl = calculatePnl(entryPrice, livePrice, signal.side);
+                  currentPnl = calculatePnl(entryPrice, livePrice, signal.side, leverage);
               }
           }
       }
@@ -248,7 +261,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         {/* Header - REFACTORED FOR BETTER LAYOUT */}
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
           {/* Left Side: Pair & Badges */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3">
             <h3 className="text-xl font-bold text-white leading-tight tracking-tight">{signal.pair}</h3>
             
             <div className="flex gap-1.5 flex-wrap items-center">
@@ -274,7 +287,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
              </span>
              {livePrice && (
-                 <div className={`flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-300 mt-0.5 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
+                 <div className={`flex items-center gap-1.5 text-xs font-mono font-medium transition-colors duration-300 mt-0.5 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
+                     {/* Blinking Dot for Live Status */}
+                     <span className="relative flex h-1.5 w-1.5">
+                       <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${priceDirection === 'up' ? 'bg-emerald-400' : priceDirection === 'down' ? 'bg-red-400' : 'bg-gray-400'}`}></span>
+                       <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${priceDirection === 'up' ? 'bg-emerald-500' : priceDirection === 'down' ? 'bg-red-500' : 'bg-gray-500'}`}></span>
+                     </span>
+                     
                      {formatPrice(livePrice)}
                      {priceDirection === 'up' && <TrendingUp size={10} />}
                      {priceDirection === 'down' && <TrendingDown size={10} />}
