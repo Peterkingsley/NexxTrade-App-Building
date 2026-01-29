@@ -45,7 +45,7 @@ const ReferralsView: React.FC<ReferralsViewProps> = ({ onBack, userProfile }) =>
   const [referralCode, setReferralCode] = useState('LOADING...');
   const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>([]);
   
-  const referralLink = `https://nexxtrade.com/ref/${referralCode}`;
+  const referralLink = `https://www.app.nexxtrade.io/ref/${referralCode}`;
 
   useEffect(() => {
     fetchData();

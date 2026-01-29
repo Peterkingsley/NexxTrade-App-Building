@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ArrowLeft, Clock, Shield, CheckCircle2, Zap, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Shield, CheckCircle2, Zap, Loader2, AlertCircle, Infinity } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface SubscriptionViewProps {
@@ -134,8 +134,8 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userProfile
                    </div>
                 </div>
 
-                {/* Countdown Section */}
-                {isPro && data.expiry ? (
+                {/* Countdown Section - Pro with Expiry */}
+                {isPro && data.expiry && (
                     <div className="w-full mb-8">
                         <h3 className="text-gray-400 text-sm font-medium text-center mb-4 flex items-center justify-center gap-2">
                             <Clock size={16} />
@@ -170,7 +170,21 @@ const SubscriptionView: React.FC<SubscriptionViewProps> = ({ onBack, userProfile
                             Expiration Date: <span className="text-gray-300">{new Date(data.expiry).toLocaleDateString()}</span>
                         </p>
                     </div>
-                ) : (
+                )}
+
+                {/* Lifetime Access - Pro without Expiry */}
+                {isPro && !data.expiry && (
+                     <div className="w-full mb-8 text-center p-6 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+                        <div className="w-12 h-12 mx-auto bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
+                            <Infinity className="text-emerald-500" size={24} />
+                        </div>
+                        <p className="text-white font-bold text-lg">Lifetime Access</p>
+                        <p className="text-emerald-400/80 text-sm mt-1">Your subscription does not expire.</p>
+                    </div>
+                )}
+
+                {/* Free Plan Message */}
+                {!isPro && (
                     <div className="w-full mb-8 text-center p-6 bg-dark-800/50 rounded-2xl border border-dark-700 border-dashed">
                         <AlertCircle className="mx-auto text-gray-500 mb-2" />
                         <p className="text-gray-400 text-sm">You are currently on the Free plan.</p>
