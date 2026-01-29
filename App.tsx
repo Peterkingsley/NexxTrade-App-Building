@@ -319,7 +319,7 @@ const App: React.FC = () => {
       case 'notification-settings':
         return <NotificationSettingsView onBack={handleBack} />;
       case 'subscription':
-        return <SubscriptionView onBack={handleBack} />;
+        return <SubscriptionView onBack={handleBack} userProfile={userProfile} />;
       case 'referrals':
         return <ReferralsView onBack={handleBack} userProfile={userProfile} />;
       default:
