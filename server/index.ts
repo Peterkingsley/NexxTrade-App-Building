@@ -183,6 +183,43 @@ const initDb = async () => {
 
 // --- API Routes ---
 
+// GET Current User Profile (Refresh Session)
+app.get('/api/auth/me', async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const result = await query('SELECT * FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        
+        const user = result.rows[0];
+        
+        // Fetch linked accounts
+        const linkedRes = await query('SELECT provider FROM linked_accounts WHERE user_id = $1', [userId]);
+        const linkedProviders = linkedRes.rows.map(r => r.provider);
+
+        // Split full name approximation
+        const nameParts = (user.full_name || '').split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        res.json({
+            id: user.id,
+            firstName,
+            lastName,
+            username: user.username,
+            photoUrl: user.photo_url,
+            role: user.role, // This ensures fresh role from DB
+            referralCode: user.referral_code,
+            notificationPreferences: user.notification_preferences,
+            linkedProviders
+        });
+    } catch (error) {
+        console.error('Auth Me Error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 app.post('/api/auth/login', async (req, res) => {
     const { provider, email, firstName, lastName, username, photoUrl, providerId } = req.body;
 

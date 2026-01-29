@@ -164,6 +164,39 @@ const App: React.FC = () => {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [isLoadingSignals, setIsLoadingSignals] = useState<boolean>(true);
 
+  // --- Profile Refresh ---
+  useEffect(() => {
+    const refreshProfile = async () => {
+        const storedUser = localStorage.getItem('nexx_user');
+        if (!storedUser) return;
+        
+        const parsedUser = JSON.parse(storedUser);
+        if (!parsedUser.id) return;
+
+        try {
+            const res = await axios.get('/api/auth/me', {
+                headers: { 'x-user-id': parsedUser.id }
+            });
+            
+            const freshProfile: UserProfile = res.data;
+            const freshProviders: AuthProvider[] = res.data.linkedProviders;
+
+            setUserProfile(freshProfile);
+            setConnectedProviders(freshProviders);
+            
+            // Update LocalStorage
+            localStorage.setItem('nexx_user', JSON.stringify(freshProfile));
+            localStorage.setItem('nexx_linked', JSON.stringify(freshProviders));
+            
+        } catch (error) {
+            console.error("Failed to refresh profile", error);
+            // Optional: Handle token expiry or invalid user here (logout)
+        }
+    };
+    
+    refreshProfile();
+  }, []);
+
   // --- Referral Link Handling ---
   useEffect(() => {
     // Check if the user landed via a referral link: /ref/CODE
