@@ -27,6 +27,7 @@ export interface Signal {
   pair: string;
   type: 'Futures' | 'Spot';
   side: 'Long' | 'Short';
+  leverage?: string; // e.g. "10x", "20x", "Cross 50x"
   status: 'active' | 'closed';
   pnl: number;
   timeAgo: string;

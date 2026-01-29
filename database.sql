@@ -40,6 +40,7 @@ CREATE TABLE signals (
     pair VARCHAR(20) NOT NULL, -- e.g. BTC/USDT
     type VARCHAR(20) NOT NULL CHECK (type IN ('Futures', 'Spot')),
     side VARCHAR(10) NOT NULL CHECK (side IN ('Long', 'Short')),
+    leverage VARCHAR(20), -- e.g. "10x", "20x", "Cross 50x"
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'closed', 'cancelled')),
     
     -- Price Data

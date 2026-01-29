@@ -249,10 +249,15 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
             <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">{signal.pair}</h3>
-            <div className="flex gap-1.5 mt-0.5 sm:mt-0">
+            <div className="flex gap-1.5 mt-0.5 sm:mt-0 flex-wrap">
                 <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' : 'bg-red-500/10 text-red-400 border-red-500/10'}`}>
                     {signal.side}
                 </span>
+                {signal.type === 'Futures' && signal.leverage && (
+                    <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border bg-yellow-500/10 text-yellow-500 border-yellow-500/10">
+                        {signal.leverage}
+                    </span>
+                )}
                 <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 rounded uppercase font-medium border ${statusColorClass}`}>
                     {displayStatus}
                 </span>
@@ -488,7 +493,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                                 </div>
                             </div>
                             <div className="bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-bold uppercase border border-white/10">
-                                {signal.type}
+                                {signal.type} {signal.leverage ? `• ${signal.leverage}` : ''}
                             </div>
                         </div>
 

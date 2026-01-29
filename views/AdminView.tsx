@@ -19,7 +19,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
 
   // Forms
   const [signalForm, setSignalForm] = useState({
-    pair: '', type: 'Futures', side: 'Long', entry: '', stopLoss: '', analysis: '', targets: ['', '', '']
+    pair: '', type: 'Futures', side: 'Long', leverage: '', entry: '', stopLoss: '', analysis: '', targets: ['', '', '']
   });
 
   const [academyForm, setAcademyForm] = useState({
@@ -58,7 +58,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
           const targets = signalForm.targets.filter(t => t.trim() !== '');
           await axios.post('/api/admin/signals', { ...signalForm, targets }, { headers: { 'x-user-id': userId } });
           setSuccessMsg('Signal Posted Successfully!');
-          setSignalForm({ pair: '', type: 'Futures', side: 'Long', entry: '', stopLoss: '', analysis: '', targets: ['', '', ''] });
+          setSignalForm({ pair: '', type: 'Futures', side: 'Long', leverage: '', entry: '', stopLoss: '', analysis: '', targets: ['', '', ''] });
       } catch (error) {
           alert('Failed to post signal');
       } finally {
@@ -167,11 +167,18 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
                             <option value="Spot">Spot</option>
                         </select>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    
+                    <div className="grid grid-cols-2 gap-4">
                         <select value={signalForm.side} onChange={e => setSignalForm({...signalForm, side: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none">
                             <option value="Long">Long</option>
                             <option value="Short">Short</option>
                         </select>
+                        {signalForm.type === 'Futures' && (
+                            <input placeholder="Leverage (e.g. 20x)" value={signalForm.leverage} onChange={e => setSignalForm({...signalForm, leverage: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none" />
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                         <input required placeholder="Entry Price" value={signalForm.entry} onChange={e => setSignalForm({...signalForm, entry: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none" />
                         <input required placeholder="Stop Loss" value={signalForm.stopLoss} onChange={e => setSignalForm({...signalForm, stopLoss: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none text-red-400" />
                     </div>

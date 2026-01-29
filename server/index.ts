@@ -100,6 +100,7 @@ const initDb = async () => {
                 pair VARCHAR(20) NOT NULL,
                 type VARCHAR(20) NOT NULL,
                 side VARCHAR(10) NOT NULL,
+                leverage VARCHAR(20),
                 status VARCHAR(20) DEFAULT 'active',
                 entry_price_display VARCHAR(100) NOT NULL,
                 entry_price_min DECIMAL(20, 8),
@@ -117,6 +118,13 @@ const initDb = async () => {
                 created_by UUID REFERENCES users(id)
             )
         `);
+
+        // Migration: Add leverage column if it doesn't exist
+        try {
+            await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS leverage VARCHAR(20)`);
+        } catch (e) {
+            console.log('Note: leverage column check', (e as Error).message);
+        }
 
         await query(`
             CREATE TABLE IF NOT EXISTS signal_targets (
@@ -490,7 +498,7 @@ app.get('/api/signals', async (req, res) => {
 
     const result = await query(`
       SELECT 
-        s.id, s.pair, s.type, s.side, s.status, 
+        s.id, s.pair, s.type, s.side, s.leverage, s.status, 
         s.pnl_percentage as pnl,
         s.entry_price_display as entry,
         s.stop_loss_price as "stopLoss",
@@ -645,7 +653,7 @@ app.post('/api/withdrawals', async (req, res) => {
 
 // Create Signal
 app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
-    const { pair, type, side, entry, stopLoss, analysis, targets } = req.body;
+    const { pair, type, side, leverage, entry, stopLoss, analysis, targets } = req.body;
     const userId = getUserId(req);
 
     if (!pair || !entry || !stopLoss || !targets || !Array.isArray(targets)) {
@@ -655,10 +663,10 @@ app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
     try {
         await query('BEGIN');
         const signalRes = await query(`
-            INSERT INTO signals (pair, type, side, entry_price_display, stop_loss_price, analysis_text, created_by, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+            INSERT INTO signals (pair, type, side, leverage, entry_price_display, stop_loss_price, analysis_text, created_by, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
             RETURNING id
-        `, [pair, type, side, entry, stopLoss, analysis, userId]);
+        `, [pair, type, side, leverage, entry, stopLoss, analysis, userId]);
 
         const signalId = signalRes.rows[0].id;
 
