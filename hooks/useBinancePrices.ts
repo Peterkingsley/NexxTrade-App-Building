@@ -17,7 +17,9 @@ export const useBinancePrices = (pairs: string[]) => {
     const connect = () => {
         // Use aggTrade for real-time trade data
         const streams = formattedPairs.map((p) => `${p}@aggTrade`).join('/');
-        const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+        
+        // Use default port (443) instead of 9443 to avoid firewall blocks
+        const wsUrl = `wss://stream.binance.com/stream?streams=${streams}`;
 
         // Close existing connection if any
         if (wsRef.current) {

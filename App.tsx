@@ -213,10 +213,10 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // --- Fetch Signals ---
+  // --- Fetch Signals (with Polling) ---
   useEffect(() => {
-    const fetchSignals = async () => {
-      setIsLoadingSignals(true);
+    const fetchSignals = async (isBackground = false) => {
+      if (!isBackground) setIsLoadingSignals(true);
       try {
         const response = await axios.get<Signal[]>('/api/signals');
         if (Array.isArray(response.data)) {
@@ -225,14 +225,20 @@ const App: React.FC = () => {
           setSignals(MOCK_SIGNALS);
         }
       } catch (error) {
-        setSignals(MOCK_SIGNALS);
+        console.error("Signal fetch failed", error);
+        if (signals.length === 0) setSignals(MOCK_SIGNALS);
       } finally {
-        setIsLoadingSignals(false);
+        if (!isBackground) setIsLoadingSignals(false);
       }
     };
 
-    fetchSignals();
-  }, [currentView]);
+    fetchSignals(); // Initial Fetch
+    
+    // Poll every 5 seconds to get updated PnL from backend if WS fails
+    const interval = setInterval(() => fetchSignals(true), 5000);
+
+    return () => clearInterval(interval);
+  }, [currentView]); // Re-run if view changes (optional, mostly stable)
 
   // --- Helper: Time Ago ---
   const calculateTimeAgo = (dateString: string) => {

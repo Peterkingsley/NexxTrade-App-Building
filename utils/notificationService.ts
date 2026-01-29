@@ -58,18 +58,46 @@ export const subscribeToPushNotifications = async (userId: string) => {
             return;
         }
 
-        // 3. Subscribe to Push Manager
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-        });
+        // 3. Check for existing subscription
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription) {
+            // If subscription exists but might be invalid/old key, we try to use it.
+            // If it fails on server side or here, we unsubscribe and re-subscribe.
+            // For now, let's assume if it exists we just send it.
+            // However, the error 'InvalidStateError' suggests key mismatch.
+        } else {
+            // Create new subscription
+            try {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                });
+            } catch (subError: any) {
+                // Handle InvalidStateError (often key mismatch)
+                if (subError.name === 'InvalidStateError' || subError.message.includes('subscription')) {
+                    console.log("Existing subscription key mismatch. Unsubscribing...");
+                    const existingSub = await registration.pushManager.getSubscription();
+                    if (existingSub) await existingSub.unsubscribe();
+                    
+                    // Retry subscription
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                    });
+                } else {
+                    throw subError;
+                }
+            }
+        }
 
         // 4. Send Subscription to Backend
-        await axios.post('/api/push/subscribe', subscription, {
-            headers: { 'x-user-id': userId }
-        });
-
-        console.log("Push Notification Subscription Successful");
+        if (subscription) {
+            await axios.post('/api/push/subscribe', subscription, {
+                headers: { 'x-user-id': userId }
+            });
+            console.log("Push Notification Subscription Successful");
+        }
 
     } catch (error) {
         console.error("Failed to subscribe to push notifications", error);
