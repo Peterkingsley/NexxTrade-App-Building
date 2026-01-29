@@ -366,7 +366,7 @@ const App: React.FC = () => {
     <div className="flex min-h-screen bg-dark-900 text-white font-sans transition-colors duration-300">
       
       {/* Desktop Sidebar */}
-      <Sidebar currentView={currentView} setView={setCurrentView} onLogout={handleLogout} />
+      <Sidebar currentView={currentView} setView={setCurrentView} onLogout={handleLogout} userProfile={userProfile} />
 
       <main className="flex-1 md:ml-64 h-screen overflow-y-auto scrollbar-hide relative">
         <div className="w-full max-w-7xl mx-auto min-h-full pb-20 md:pb-6">
@@ -375,7 +375,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <BottomNav currentView={currentView} setView={setCurrentView} />
+      <BottomNav currentView={currentView} setView={setCurrentView} userProfile={userProfile} />
       
       <OnboardingTour 
         steps={TOUR_STEPS} 

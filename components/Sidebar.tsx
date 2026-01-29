@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Activity, BarChart2, BookOpen, User, LogOut, Shield } from 'lucide-react';
-import { ViewState } from '../types';
+import { ViewState, UserProfile } from '../types';
 
 interface SidebarProps {
   currentView: ViewState;
   setView: (view: ViewState) => void;
   onLogout: () => void;
+  userProfile: UserProfile | null;
 }
 
 // Custom NexxTrade Logo Icon
@@ -23,16 +24,8 @@ const NexxLogoIcon = ({ size = 24, className = "" }: { size?: number | string, c
   </svg>
 );
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout }) => {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const userStr = localStorage.getItem('nexx_user');
-    if (userStr) {
-        const user = JSON.parse(userStr);
-        if (user.role === 'admin') setIsAdmin(true);
-    }
-  }, []);
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout, userProfile }) => {
+  const isAdmin = userProfile?.role === 'admin';
 
   const navItems = [
     { id: 'home', label: 'Home', icon: NexxLogoIcon },
