@@ -19,11 +19,9 @@ import AdminView from './views/AdminView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
 import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile, NotificationItem } from './types';
-import { requestNotificationPermission, sendLocalNotification } from './utils/notificationService';
+import { requestNotificationPermission, sendLocalNotification, subscribeToPushNotifications } from './utils/notificationService';
 
 // Configure Axios Base URL
-// In Production, we use relative paths (empty string) so requests go to the same domain.
-// In Development, we point to localhost:3001
 axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001';
 
 const TOUR_STEPS: TourStep[] = [
@@ -165,9 +163,9 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoadingSignals, setIsLoadingSignals] = useState<boolean>(true);
 
-  // --- Profile Refresh ---
+  // --- Profile Refresh & Push Subscription ---
   useEffect(() => {
-    const refreshProfile = async () => {
+    const refreshProfileAndSubscribe = async () => {
         const storedUser = localStorage.getItem('nexx_user');
         if (!storedUser) return;
         
@@ -175,6 +173,7 @@ const App: React.FC = () => {
         if (!parsedUser.id) return;
 
         try {
+            // 1. Refresh Profile
             const res = await axios.get('/api/auth/me', {
                 headers: { 'x-user-id': parsedUser.id }
             });
@@ -188,28 +187,27 @@ const App: React.FC = () => {
             // Update LocalStorage
             localStorage.setItem('nexx_user', JSON.stringify(freshProfile));
             localStorage.setItem('nexx_linked', JSON.stringify(freshProviders));
+
+            // 2. Subscribe to Push Notifications if user is logged in
+            subscribeToPushNotifications(parsedUser.id);
             
         } catch (error) {
             console.error("Failed to refresh profile", error);
-            // Optional: Handle token expiry or invalid user here (logout)
         }
     };
     
-    refreshProfile();
+    refreshProfileAndSubscribe();
   }, []);
 
   // --- Referral Link Handling ---
   useEffect(() => {
-    // Check if the user landed via a referral link: /ref/CODE
     const path = window.location.pathname;
     if (path.startsWith('/ref/')) {
         const segments = path.split('/');
-        // Path is like ["", "ref", "CODE"]
         const code = segments[2];
         if (code) {
             console.log("Captured Referral Code:", code);
             localStorage.setItem('nexx_referral_pending', code);
-            // Clean the URL so the user feels like they are on the homepage
             window.history.replaceState(null, '', '/');
         }
     }
@@ -220,17 +218,13 @@ const App: React.FC = () => {
     const fetchSignals = async () => {
       setIsLoadingSignals(true);
       try {
-        // Attempt to fetch signals from the backend
         const response = await axios.get<Signal[]>('/api/signals');
         if (Array.isArray(response.data)) {
           setSignals(response.data);
         } else {
-          console.warn('Received invalid signal data format, using mock data');
           setSignals(MOCK_SIGNALS);
         }
       } catch (error) {
-        console.warn('Backend unavailable (Network Error). Using Mock Data for demonstration.', error);
-        // Fallback to MOCK_SIGNALS to ensure UI is functional even without backend
         setSignals(MOCK_SIGNALS);
       } finally {
         setIsLoadingSignals(false);
@@ -238,7 +232,7 @@ const App: React.FC = () => {
     };
 
     fetchSignals();
-  }, [currentView]); // Re-fetch when view changes (e.g. creating a signal in admin)
+  }, [currentView]);
 
   // --- Helper: Time Ago ---
   const calculateTimeAgo = (dateString: string) => {
@@ -255,9 +249,8 @@ const App: React.FC = () => {
     return `${Math.floor(hours / 24)}d ago`;
   };
 
-  // --- Notification Polling & Alerting ---
+  // --- Notification Polling (Keep Polling for In-App Updates) ---
   useEffect(() => {
-      // Don't poll if not logged in
       if (!userProfile?.id) return;
 
       const fetchNotifications = async () => {
@@ -267,7 +260,6 @@ const App: React.FC = () => {
               });
               
               const rawData = res.data;
-              // Transform DB format to UI format
               const formatted: NotificationItem[] = rawData.map((n: any) => ({
                   id: n.id,
                   type: n.type,
@@ -279,13 +271,13 @@ const App: React.FC = () => {
               
               setNotifications(formatted);
 
-              // Check for new notifications to trigger browser alert
+              // Only send LOCAL notification if push isn't supported or active
+              // But for simplicity, we keep both as redundancies (Browser usually de-dupes if same tag)
               if (rawData.length > 0) {
-                  const latest = rawData[0]; // Assuming sorted by created_at DESC
+                  const latest = rawData[0];
                   const latestId = latest.id;
                   const lastSeenId = localStorage.getItem('nexx_last_notification_id');
                   
-                  // If we have a new top notification ID that we haven't seen
                   if (latestId !== lastSeenId) {
                       localStorage.setItem('nexx_last_notification_id', latestId);
                       sendLocalNotification(latest.title, latest.message);
@@ -297,21 +289,16 @@ const App: React.FC = () => {
           }
       };
 
-      // Initial Fetch
       fetchNotifications();
-
-      // Poll every 30 seconds
       const interval = setInterval(fetchNotifications, 30000);
       return () => clearInterval(interval);
   }, [userProfile?.id]);
 
   // --- Live Pricing Integration ---
-  // Extract unique pairs from fetched signals to subscribe to
   const signalPairs = useMemo(() => {
     return Array.from(new Set(signals.map(s => s.pair)));
   }, [signals]);
   
-  // Get live prices map: { "BTCUSDT": 42000.00, ... }
   const livePrices = useBinancePrices(signalPairs);
 
   useEffect(() => {
@@ -333,21 +320,22 @@ const App: React.FC = () => {
     
     if (userData) {
       setUserProfile(userData);
-      // Persist Session
       localStorage.setItem('nexx_user', JSON.stringify(userData));
       localStorage.setItem('nexx_provider', provider);
       localStorage.setItem('nexx_linked', JSON.stringify(accounts));
+      
+      // Attempt Push Subscription on Login
+      if (userData.id) {
+          subscribeToPushNotifications(userData.id);
+      }
     }
     
-    // Only show referral input for new users
     if (isNewUser) {
         setCurrentView('referral-input');
     } else {
         setCurrentView('home');
     }
 
-    // --- WELCOME NOTIFICATION TRIGGER ---
-    // Ask for permission and show welcome notification
     try {
         const granted = await requestNotificationPermission();
         if (granted) {
@@ -371,7 +359,6 @@ const App: React.FC = () => {
 
   const handleReferralComplete = () => {
       setCurrentView('home');
-      // Trigger tour after referral step (Skip or Submit)
       setTimeout(() => setShowTour(true), 800);
   };
 
@@ -379,18 +366,15 @@ const App: React.FC = () => {
     setCurrentView('auth');
     setUserProfile(null);
     setConnectedProviders([]);
-    setNotifications([]); // Clear notifications on logout
+    setNotifications([]);
     
-    // Clear Session
     localStorage.removeItem('nexx_user');
     localStorage.removeItem('nexx_provider');
     localStorage.removeItem('nexx_linked');
   };
 
   const handleNavigate = (view: ViewState) => {
-    // If navigating to detail views, save current view as previous
     if (view === 'notifications' || view === 'subscription' || view === 'notification-settings' || view === 'referrals' || view === 'signal-history') {
-        // Special case: if we are in signal-history, back goes to signals, not signal-history
         if (currentView !== 'signal-history') {
             setPreviousView(currentView);
         }
@@ -411,7 +395,6 @@ const App: React.FC = () => {
       localStorage.setItem('nexx_intro_seen', 'true');
   };
 
-  // Views that take full screen without layout wrapper
   if (currentView === 'intro') {
       return <IntroView onComplete={handleIntroComplete} />;
   }
@@ -424,7 +407,6 @@ const App: React.FC = () => {
       return <ReferralInputView onComplete={handleReferralComplete} userProfile={userProfile} />;
   }
 
-  // Views that share the dashboard layout
   const renderContent = () => {
     switch (currentView) {
       case 'home':
@@ -464,24 +446,14 @@ const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-dark-900 text-white font-sans transition-colors duration-300">
-      
-      {/* Desktop Sidebar */}
       <Sidebar currentView={currentView} setView={setCurrentView} onLogout={handleLogout} userProfile={userProfile} />
-
       <main className="flex-1 md:ml-64 h-screen overflow-y-auto scrollbar-hide relative">
         <div className="w-full max-w-7xl mx-auto min-h-full pb-20 md:pb-6">
           {renderContent()}
         </div>
       </main>
-
-      {/* Mobile Bottom Navigation */}
       <BottomNav currentView={currentView} setView={setCurrentView} userProfile={userProfile} />
-      
-      <OnboardingTour 
-        steps={TOUR_STEPS} 
-        isOpen={showTour} 
-        onComplete={handleTourComplete} 
-      />
+      <OnboardingTour steps={TOUR_STEPS} isOpen={showTour} onComplete={handleTourComplete} />
     </div>
   );
 };

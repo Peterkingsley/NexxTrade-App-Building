@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import webpush from 'web-push'; // Requires: npm install web-push
 
 // Fix for __dirname in ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,31 @@ const PORT = process.env.PORT || 3001;
 // Enable CORS
 app.use(cors());
 app.use(express.json());
+
+// --- Web Push Configuration ---
+// Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
+const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '...';
+
+// We try to generate keys dynamically if they are clearly placeholders or missing
+// This ensures the app works out of the box, but subscriptions will be lost on server restart if keys aren't saved
+let vapidKeys = {
+    publicKey: process.env.VAPID_PUBLIC_KEY,
+    privateKey: process.env.VAPID_PRIVATE_KEY
+};
+
+if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+    console.log("No VAPID keys found in .env. Generating ephemeral keys for this session.");
+    vapidKeys = webpush.generateVAPIDKeys();
+    console.log("EPHEMERAL PUBLIC KEY:", vapidKeys.publicKey);
+    console.log("EPHEMERAL PRIVATE KEY:", vapidKeys.privateKey);
+}
+
+webpush.setVapidDetails(
+  'mailto:support@nexxtrade.com',
+  vapidKeys.publicKey!,
+  vapidKeys.privateKey!
+);
 
 // --- Helper Functions ---
 const generateReferralCode = () => {
@@ -182,6 +208,18 @@ const initDb = async () => {
                 published_at TIMESTAMPTZ DEFAULT NOW()
             )
         `);
+        
+        // Push Subscriptions Table
+        await query(`
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                endpoint TEXT NOT NULL,
+                keys JSONB NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(user_id, endpoint)
+            )
+        `);
 
         console.log("Database schema verified/updated successfully.");
     } catch (error) {
@@ -190,6 +228,34 @@ const initDb = async () => {
 };
 
 // --- API Routes ---
+
+// GET Public VAPID Key for Frontend
+app.get('/api/push/vapid-public-key', (req, res) => {
+    res.json({ publicKey: vapidKeys.publicKey });
+});
+
+// POST Subscribe to Push Notifications
+app.post('/api/push/subscribe', async (req, res) => {
+    const userId = getUserId(req);
+    const subscription = req.body;
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+
+    try {
+        await query(`
+            INSERT INTO push_subscriptions (user_id, endpoint, keys)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, endpoint) DO NOTHING
+        `, [userId, subscription.endpoint, JSON.stringify(subscription.keys)]);
+        
+        console.log(`User ${userId} subscribed to push notifications.`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Push Subscribe Error:', error);
+        res.status(500).json({ error: 'Failed to subscribe' });
+    }
+});
 
 // GET Current User Profile (Refresh Session)
 app.get('/api/auth/me', async (req, res) => {
@@ -671,7 +737,7 @@ app.post('/api/withdrawals', async (req, res) => {
 
 // --- ADMIN ROUTES ---
 
-// Create Signal
+// Create Signal (Send Push)
 app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
     const { pair, type, side, leverage, entry, stopLoss, analysis, targets } = req.body;
     const userId = getUserId(req);
@@ -696,6 +762,20 @@ app.post('/api/admin/signals', ensureAdmin, async (req, res) => {
                 VALUES ($1, $2, $3, false)
             `, [signalId, targets[i], i + 1]);
         }
+
+        // Send Push Notification for Signal
+        // In a real app, optimize this to batch send
+        const subsRes = await query('SELECT keys, endpoint FROM push_subscriptions');
+        const notificationPayload = JSON.stringify({
+            title: `New Signal: ${pair} ${side}`,
+            body: `${type} Trade. Entry: ${entry}`,
+            icon: '/logo.png'
+        });
+
+        subsRes.rows.forEach(sub => {
+            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, notificationPayload)
+                .catch(err => console.error("Push Error", err));
+        });
 
         await query('COMMIT');
         res.json({ success: true, signalId });
@@ -752,16 +832,37 @@ app.post('/api/admin/academy', ensureAdmin, async (req, res) => {
     }
 });
 
-// Send Notification
+// Send Notification (Broadcast with Push)
 app.post('/api/admin/notifications', ensureAdmin, async (req, res) => {
     const { title, message, type } = req.body;
     // user_id NULL means global
     try {
+        // 1. Save to Database
         await query(`
             INSERT INTO notifications (type, title, message, user_id)
             VALUES ($1, $2, $3, NULL)
         `, [type, title, message]);
-        res.json({ success: true });
+
+        // 2. Broadcast via Web Push
+        const subsRes = await query('SELECT keys, endpoint FROM push_subscriptions');
+        const notificationPayload = JSON.stringify({
+            title: title,
+            body: message,
+            icon: '/logo.png'
+        });
+
+        // Fire and forget push sending
+        subsRes.rows.forEach(sub => {
+            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, notificationPayload)
+                .catch(err => {
+                    // 410 Gone means subscription is invalid/expired
+                    if (err.statusCode === 410) {
+                         query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(console.error);
+                    }
+                });
+        });
+
+        res.json({ success: true, count: subsRes.rowCount });
     } catch (error) {
         console.error('Send Notification Error:', error);
         res.status(500).json({ error: 'Failed to send notification' });

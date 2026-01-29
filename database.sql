@@ -149,11 +149,22 @@ CREATE TABLE app_settings (
     description TEXT
 );
 
+-- 11. PUSH SUBSCRIPTIONS (NEW)
+CREATE TABLE push_subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL,
+    keys JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, endpoint)
+);
+
 -- INDEXES FOR PERFORMANCE
 CREATE INDEX idx_signals_pair ON signals(pair);
 CREATE INDEX idx_signals_status ON signals(status);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_withdrawals_user ON withdrawals(user_id);
+CREATE INDEX idx_push_subs_user ON push_subscriptions(user_id);
 
 -- SEED DATA (Optional Examples)
 INSERT INTO academy_categories (name, slug) VALUES 
