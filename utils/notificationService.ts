@@ -34,6 +34,19 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     return false;
 };
 
+// Helper to unsubscribe
+const unsubscribeUser = async (registration: ServiceWorkerRegistration) => {
+    try {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+            await subscription.unsubscribe();
+            console.log("Unsubscribed old subscription.");
+        }
+    } catch (e) {
+        console.error("Error unsubscribing", e);
+    }
+};
+
 // Main function to subscribe to Web Push
 export const subscribeToPushNotifications = async (userId: string) => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -61,26 +74,25 @@ export const subscribeToPushNotifications = async (userId: string) => {
         // 3. Check for existing subscription
         let subscription = await registration.pushManager.getSubscription();
 
+        // Check if we need to re-subscribe (e.g. key rotation or invalid state)
         if (subscription) {
-            // If subscription exists but might be invalid/old key, we try to use it.
-            // If it fails on server side or here, we unsubscribe and re-subscribe.
-            // For now, let's assume if it exists we just send it.
-            // However, the error 'InvalidStateError' suggests key mismatch.
+            // Optional: You could compare keys here if you stored the old key
+            // For now, we assume if it exists, we send it.
+            // If the server rejects it (410 Gone), we handle that elsewhere.
         } else {
-            // Create new subscription
+            // 4. Create new subscription
             try {
                 subscription = await registration.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
                 });
             } catch (subError: any) {
-                // Handle InvalidStateError (often key mismatch)
+                // FIXED: Handle InvalidStateError (Key Mismatch)
                 if (subError.name === 'InvalidStateError' || subError.message.includes('subscription')) {
-                    console.log("Existing subscription key mismatch. Unsubscribing...");
-                    const existingSub = await registration.pushManager.getSubscription();
-                    if (existingSub) await existingSub.unsubscribe();
+                    console.warn("Push Subscription mismatch detected. Resetting subscription...");
+                    await unsubscribeUser(registration);
                     
-                    // Retry subscription
+                    // Retry subscription once
                     subscription = await registration.pushManager.subscribe({
                         userVisibleOnly: true,
                         applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
@@ -91,12 +103,12 @@ export const subscribeToPushNotifications = async (userId: string) => {
             }
         }
 
-        // 4. Send Subscription to Backend
+        // 5. Send Subscription to Backend
         if (subscription) {
             await axios.post('/api/push/subscribe', subscription, {
                 headers: { 'x-user-id': userId }
             });
-            console.log("Push Notification Subscription Successful");
+            console.log("Push Notification Subscription Synced");
         }
 
     } catch (error) {

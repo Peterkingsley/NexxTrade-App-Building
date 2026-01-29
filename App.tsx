@@ -17,12 +17,13 @@ import IntroView from './views/IntroView';
 import ReferralInputView from './views/ReferralInputView';
 import AdminView from './views/AdminView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
-import { useBinancePrices } from './hooks/useBinancePrices';
+import { useCoinbasePrices } from './hooks/useBinancePrices'; // Using Coinbase logic now
 import { ViewState, Signal, AuthProvider, UserProfile, NotificationItem } from './types';
 import { requestNotificationPermission, sendLocalNotification, subscribeToPushNotifications } from './utils/notificationService';
 
-// Configure Axios Base URL
-axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001';
+// NOTE: Axios baseURL is NOT set here. 
+// We rely on the Vite Proxy (in vite.config.ts) to forward /api requests to http://localhost:3001
+// This prevents CORS issues and "Network Error" in development environments.
 
 const TOUR_STEPS: TourStep[] = [
     {
@@ -225,7 +226,8 @@ const App: React.FC = () => {
           setSignals(MOCK_SIGNALS);
         }
       } catch (error) {
-        console.error("Signal fetch failed", error);
+        // Silent error for background polls to reduce noise
+        if (!isBackground) console.error("Signal fetch failed, using fallback.");
         if (signals.length === 0) setSignals(MOCK_SIGNALS);
       } finally {
         if (!isBackground) setIsLoadingSignals(false);
@@ -291,7 +293,7 @@ const App: React.FC = () => {
               }
 
           } catch (e) {
-              console.error("Notification fetch failed", e);
+              // Ignore notification errors
           }
       };
 
@@ -300,12 +302,12 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
   }, [userProfile?.id]);
 
-  // --- Live Pricing Integration ---
+  // --- Live Pricing Integration (Coinbase) ---
   const signalPairs = useMemo(() => {
     return Array.from(new Set(signals.map(s => s.pair)));
   }, [signals]);
   
-  const livePrices = useBinancePrices(signalPairs);
+  const livePrices = useCoinbasePrices(signalPairs);
 
   useEffect(() => {
     if (isDarkMode) {

@@ -1,64 +1,81 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-export const useBinancePrices = (pairs: string[]) => {
+export const useCoinbasePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<any>(null);
+  const retryDelay = useRef<number>(3000); // Start with 3s delay
+
+  // Format pairs for Coinbase: "BTC/USDT" -> "BTC-USDT"
+  const getCoinbasePairs = useCallback(() => {
+    return pairs
+      .map((p) => {
+          const upper = p.toUpperCase();
+          // Coinbase uses dashes (BTC-USD, BTC-USDT)
+          if (upper.includes('/')) return upper.replace('/', '-');
+          return upper;
+      })
+      .filter((p) => p && !p.includes('LOCKED'));
+  }, [pairs]);
 
   useEffect(() => {
-    // 1. Format pairs for Binance stream (e.g., "BTC/USDT" -> "btcusdt")
-    // Filter out pairs that are "Locked" or invalid or too short to be a pair
-    const formattedPairs = pairs
-      .map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, ''))
-      .filter((p) => p && !p.includes('locked') && p.length > 3);
-
-    if (formattedPairs.length === 0) return;
+    const coinbasePairs = getCoinbasePairs();
+    if (coinbasePairs.length === 0) return;
 
     const connect = () => {
-        // Use aggTrade for real-time trade data
-        const streams = formattedPairs.map((p) => `${p}@aggTrade`).join('/');
-        
-        // Use default port (443) instead of 9443 to avoid firewall blocks
-        const wsUrl = `wss://stream.binance.com/stream?streams=${streams}`;
-
-        // Close existing connection if any
+        // Clear any existing connection
         if (wsRef.current) {
             wsRef.current.close();
         }
 
+        // Coinbase Exchange WebSocket Public Feed
+        const wsUrl = 'wss://ws-feed.exchange.coinbase.com';
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          // console.log('Connected to Binance Live Prices');
+            // console.log('Connected to Coinbase Live Prices');
+            retryDelay.current = 3000;
+            
+            // Subscribe to ticker channel
+            const subscribeMsg = {
+                type: "subscribe",
+                product_ids: coinbasePairs,
+                channels: ["ticker"]
+            };
+            ws.send(JSON.stringify(subscribeMsg));
         };
 
         ws.onmessage = (event) => {
-          try {
-              const message = JSON.parse(event.data);
-              // aggTrade format: { stream: "btcusdt@aggTrade", data: { s: "BTCUSDT", p: "123.45", ... } }
-              if (message.data && message.data.s && message.data.p) {
-                const symbol = message.data.s; 
-                const price = parseFloat(message.data.p);
+            try {
+                const message = JSON.parse(event.data);
+                
+                // Handle Ticker Update
+                // { type: "ticker", product_id: "BTC-USDT", price: "90000.00", ... }
+                if (message.type === 'ticker' && message.product_id && message.price) {
+                    // Convert "BTC-USDT" -> "BTCUSDT" to match the keys the App expects
+                    const internalSymbol = message.product_id.replace('-', '').toUpperCase();
+                    const price = parseFloat(message.price);
 
-                setPrices((prev) => {
-                     // Simple optimization to avoid rerenders if price is identical
-                     if (prev[symbol] === price) return prev;
-                     return { ...prev, [symbol]: price };
-                });
-              }
-          } catch (e) {
-              // Ignore parse errors
-          }
+                    setPrices((prev) => ({ ...prev, [internalSymbol]: price }));
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
         };
 
         ws.onclose = () => {
-            // console.log('Binance WS disconnected. Reconnecting...');
-            reconnectTimeout.current = setTimeout(connect, 3000);
+             // Exponential Backoff for Reconnect
+            // console.log(`Coinbase WS Disconnected. Retrying in ${retryDelay.current}ms`);
+            reconnectTimeout.current = setTimeout(() => {
+                connect();
+                // Increase delay for next time, cap at 30s
+                retryDelay.current = Math.min(retryDelay.current * 1.5, 30000);
+            }, retryDelay.current);
         };
 
         ws.onerror = (err) => {
-            console.error('Binance WS Error (Price Feed):', err);
+            console.warn('Coinbase WS Error:', err);
             ws.close();
         };
     };
@@ -66,12 +83,8 @@ export const useBinancePrices = (pairs: string[]) => {
     connect();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current);
-      }
+        if (wsRef.current) wsRef.current.close();
+        if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
     };
   }, [JSON.stringify(pairs)]); 
 
