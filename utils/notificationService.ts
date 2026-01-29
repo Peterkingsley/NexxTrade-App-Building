@@ -18,16 +18,36 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     return false;
 };
 
-export const sendLocalNotification = (title: string, body: string, icon: string = '/logo.png') => {
-    if ('Notification' in window && Notification.permission === 'granted') {
+export const sendLocalNotification = async (title: string, body: string, icon: string = '/logo.png') => {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
         const options = {
             body,
             icon,
             vibrate: [200, 100, 200], // Vibration pattern for mobile
+            tag: 'nexxtrade-alert', // Grouping tag
+            requireInteraction: false
         };
+
+        // 1. Try Service Worker Method (Required for Android/Mobile)
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                if (registration) {
+                    await registration.showNotification(title, options);
+                    return;
+                }
+            } catch (e) {
+                console.log("Service Worker notification failed, falling back to classic API", e);
+            }
+        }
         
-        // Mobile browsers might require ServiceWorker for consistent notifications, 
-        // but this works for desktop and open tabs on Android.
-        new Notification(title, options);
+        // 2. Fallback to Classic API (Desktop / Browsers without SW)
+        try {
+            new Notification(title, options);
+        } catch (e) {
+            console.error("Classic Notification API failed", e);
+        }
     }
 };
