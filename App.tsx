@@ -17,7 +17,7 @@ import IntroView from './views/IntroView';
 import ReferralInputView from './views/ReferralInputView';
 import AdminView from './views/AdminView';
 import OnboardingTour, { TourStep } from './components/OnboardingTour';
-import { useCoinbasePrices } from './hooks/useBinancePrices'; // Using Coinbase logic now
+import { useBinancePrices } from './hooks/useBinancePrices';
 import { ViewState, Signal, AuthProvider, UserProfile, NotificationItem } from './types';
 import { requestNotificationPermission, sendLocalNotification, subscribeToPushNotifications } from './utils/notificationService';
 
@@ -302,12 +302,12 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
   }, [userProfile?.id]);
 
-  // --- Live Pricing Integration (Coinbase) ---
+  // --- Live Pricing Integration ---
   const signalPairs = useMemo(() => {
     return Array.from(new Set(signals.map(s => s.pair)));
   }, [signals]);
   
-  const livePrices = useCoinbasePrices(signalPairs);
+  const livePrices = useBinancePrices(signalPairs);
 
   useEffect(() => {
     if (isDarkMode) {

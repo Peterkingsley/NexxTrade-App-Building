@@ -1,161 +1,90 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const COINBASE_WS_URL = 'wss://ws-feed.exchange.coinbase.com';
-const HEARTBEAT_INTERVAL = 10000; // Check every 10 seconds
-const CONNECTION_TIMEOUT = 5000; // Wait 5 seconds for connection to stabilize before resetting backoff
-
-export const useCoinbasePrices = (pairs: string[]) => {
+export const useBinancePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
-  
-  // Refs for state management without triggering re-renders
   const wsRef = useRef<WebSocket | null>(null);
-  const retryCountRef = useRef<number>(0);
-  const reconnectTimeoutRef = useRef<any>(null);
-  const heartbeatIntervalRef = useRef<any>(null);
-  const lastMessageTimeRef = useRef<number>(Date.now());
-  const isMountedRef = useRef<boolean>(true);
-  const connectionStabilizerRef = useRef<any>(null);
+  const reconnectTimeout = useRef<any>(null);
+  const retryDelay = useRef<number>(3000); // Start with 3s delay
 
-  // Format pairs for Coinbase: "BTC/USDT" -> "BTC-USDT"
-  const getCoinbasePairs = useCallback(() => {
+  // Format pairs for Binance stream
+  const getStreams = useCallback(() => {
     return pairs
-      .map((p) => {
-          const upper = p.toUpperCase();
-          // Coinbase uses dashes (BTC-USD, BTC-USDT)
-          if (upper.includes('/')) return upper.replace('/', '-');
-          return upper;
-      })
-      .filter((p) => p && !p.includes('LOCKED'));
+      .map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      .filter((p) => p && !p.includes('locked') && p.length > 3)
+      .map((p) => `${p}@aggTrade`);
   }, [pairs]);
 
   useEffect(() => {
-    isMountedRef.current = true;
-    const coinbasePairs = getCoinbasePairs();
-
-    // Cleanup function to close socket and clear timers
-    const cleanup = () => {
-        if (wsRef.current) {
-            // Remove listeners to prevent zombie callbacks
-            wsRef.current.onclose = null;
-            wsRef.current.onerror = null;
-            wsRef.current.onmessage = null;
-            wsRef.current.onopen = null;
-            wsRef.current.close();
-            wsRef.current = null;
-        }
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-        if (connectionStabilizerRef.current) clearTimeout(connectionStabilizerRef.current);
-    };
-
-    if (coinbasePairs.length === 0) return cleanup;
+    const streams = getStreams();
+    if (streams.length === 0) return;
 
     const connect = () => {
-        // Prevent double connections
-        if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
-            return;
+        // Clear any existing connection
+        if (wsRef.current) {
+            wsRef.current.close();
         }
 
-        const ws = new WebSocket(COINBASE_WS_URL);
+        // Use standard SSL port 443 instead of 9443 to avoid firewall issues
+        // Binance Stream Limit: max 1024 streams per connection
+        const streamString = streams.join('/');
+        const wsUrl = `wss://stream.binance.com:443/stream?streams=${streamString}`;
+
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
-        lastMessageTimeRef.current = Date.now(); // Reset watchdog
 
         ws.onopen = () => {
-            if (!isMountedRef.current) {
-                ws.close();
-                return;
-            }
-            // console.log('Coinbase WS Connected');
-            
-            // Subscribe logic
-            const subscribeMsg = {
-                type: "subscribe",
-                product_ids: coinbasePairs,
-                channels: ["ticker"] // Using ticker channel for lightweight price updates
-            };
-            ws.send(JSON.stringify(subscribeMsg));
-
-            // Start Heartbeat Monitor
-            if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-            heartbeatIntervalRef.current = setInterval(() => {
-                const now = Date.now();
-                // If no message for 15 seconds, assume dead connection
-                if (now - lastMessageTimeRef.current > 15000) {
-                    console.warn("Coinbase WS: No heartbeat received. Forcing reconnect.");
-                    ws.close(); // This triggers onclose
-                }
-            }, HEARTBEAT_INTERVAL);
-
-            // If connection stays alive for 5 seconds, reset the backoff counter
-            connectionStabilizerRef.current = setTimeout(() => {
-                retryCountRef.current = 0;
-            }, CONNECTION_TIMEOUT);
+          // console.log('Connected to Binance Live Prices via Port 443');
+          // Reset backoff on successful connection
+          retryDelay.current = 3000;
         };
 
         ws.onmessage = (event) => {
-            if (!isMountedRef.current) return;
-            
-            // Update heartbeat timestamp
-            lastMessageTimeRef.current = Date.now();
+          try {
+              const message = JSON.parse(event.data);
+              // Format: { stream: "btcusdt@aggTrade", data: { s: "BTCUSDT", p: "123.45", ... } }
+              if (message.data && message.data.s && message.data.p) {
+                const symbol = message.data.s; 
+                const price = parseFloat(message.data.p);
 
-            try {
-                const message = JSON.parse(event.data);
-                
-                // Handle Ticker Update
-                // { type: "ticker", product_id: "BTC-USDT", price: "90000.00", ... }
-                if (message.type === 'ticker' && message.product_id && message.price) {
-                    const internalSymbol = message.product_id.replace('-', '').toUpperCase();
-                    const price = parseFloat(message.price);
-
-                    setPrices((prev) => {
-                        // Only update if price changed to avoid excessive renders
-                        if (prev[internalSymbol] === price) return prev;
-                        return { ...prev, [internalSymbol]: price };
-                    });
-                }
-            } catch (e) {
-                // Ignore parse errors
-            }
+                setPrices((prev) => {
+                     // Optimization: Only update state if price actually changes significantly
+                     // or purely relying on React's diffing (here we just update)
+                     return { ...prev, [symbol]: price };
+                });
+              }
+          } catch (e) {
+              // Silent fail on parse error
+          }
         };
 
-        ws.onclose = (event) => {
-            if (!isMountedRef.current) return;
-
-            // Clear stability timer so we don't reset retries if it failed quickly
-            if (connectionStabilizerRef.current) clearTimeout(connectionStabilizerRef.current);
-            if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-            wsRef.current = null;
-
-            // Log specific error codes for debugging
-            if (event.code !== 1000) {
-                console.warn(`Coinbase WS Closed. Code: ${event.code}, Reason: ${event.reason}`);
-                if (event.code === 429) {
-                    console.error("Coinbase Rate Limit Hit. Backing off significantly.");
-                }
-            }
-
-            // Exponential Backoff Strategy
-            // 1st retry: 1s, 2nd: 2s, 3rd: 4s, 4th: 8s... max 30s
-            const delay = Math.min(1000 * (2 ** retryCountRef.current), 30000);
-            retryCountRef.current += 1;
-
-            // console.log(`Reconnecting in ${delay}ms... (Attempt ${retryCountRef.current})`);
-            reconnectTimeoutRef.current = setTimeout(connect, delay);
+        ws.onclose = () => {
+            // Exponential Backoff for Reconnect
+            // console.log(`WS Disconnected. Retrying in ${retryDelay.current}ms`);
+            
+            reconnectTimeout.current = setTimeout(() => {
+                connect();
+                // Increase delay for next time, cap at 30s
+                retryDelay.current = Math.min(retryDelay.current * 1.5, 30000);
+            }, retryDelay.current);
         };
 
         ws.onerror = (err) => {
-            // Just log, onclose will handle the retry logic
-            // console.error('Coinbase WS Error', err);
+            console.warn('Binance WS Error (switching to backoff):', err);
+            ws.close(); // Trigger onclose to handle reconnect
         };
     };
 
     connect();
 
     return () => {
-        isMountedRef.current = false;
-        cleanup();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+      }
     };
-  }, [JSON.stringify(pairs)]); // Deep compare pairs to prevent unnecessary reconnects
+  }, [JSON.stringify(pairs)]); // Re-connect only if pairs list changes
 
   return prices;
 };
