@@ -20,7 +20,7 @@ const COIN_GECKO_MAP: Record<string, string> = {
     'ALGO': 'algorand'
 };
 
-const POLLING_INTERVAL = 15000; // 15 seconds (Safe for CoinGecko Free Tier)
+const POLLING_INTERVAL = 1000; // 1 second (High frequency)
 
 export const useBinancePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
