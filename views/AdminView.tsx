@@ -19,7 +19,15 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
 
   // Forms
   const [signalForm, setSignalForm] = useState({
-    pair: '', type: 'Futures', side: 'Long', leverage: '', entry: '', stopLoss: '', analysis: '', targets: ['', '', '']
+    pair: '', 
+    type: 'Futures', 
+    side: 'Long', 
+    leverage: '', 
+    entry: '', 
+    stopLoss: '', 
+    analysis: '', 
+    targets: ['', '', ''],
+    requiresSubscription: 'free' // New Field
   });
 
   const [academyForm, setAcademyForm] = useState({
@@ -63,7 +71,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
           const targets = signalForm.targets.filter(t => t.trim() !== '');
           await axios.post('/api/admin/signals', { ...signalForm, targets }, { headers: { 'x-user-id': userId } });
           setSuccessMsg('Signal Posted Successfully!');
-          setSignalForm({ pair: '', type: 'Futures', side: 'Long', leverage: '', entry: '', stopLoss: '', analysis: '', targets: ['', '', ''] });
+          setSignalForm({ pair: '', type: 'Futures', side: 'Long', leverage: '', entry: '', stopLoss: '', analysis: '', targets: ['', '', ''], requiresSubscription: 'free' });
       } catch (error) {
           alert('Failed to post signal');
       } finally {
@@ -222,10 +230,17 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
                             <option value="Long">Long</option>
                             <option value="Short">Short</option>
                         </select>
-                        {signalForm.type === 'Futures' && (
-                            <input placeholder="Leverage (e.g. 20x)" value={signalForm.leverage} onChange={e => setSignalForm({...signalForm, leverage: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none" />
-                        )}
+                        <select value={signalForm.requiresSubscription} onChange={e => setSignalForm({...signalForm, requiresSubscription: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none">
+                            <option value="free">Free Tier (Everyone)</option>
+                            <option value="basic">Basic Tier</option>
+                            <option value="pro">Pro Tier</option>
+                            <option value="elite">Elite Tier</option>
+                        </select>
                     </div>
+                    
+                    {signalForm.type === 'Futures' && (
+                        <input placeholder="Leverage (e.g. 20x)" value={signalForm.leverage} onChange={e => setSignalForm({...signalForm, leverage: e.target.value})} className="w-full bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none" />
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <input required placeholder="Entry Price" value={signalForm.entry} onChange={e => setSignalForm({...signalForm, entry: e.target.value})} className="bg-dark-800 p-3 rounded-xl border border-dark-700 outline-none" />
@@ -269,6 +284,11 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
                                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${signal.side === 'Long' ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' : 'bg-red-500/20 text-red-500 border-red-500/30'}`}>
                                         {signal.side}
                                     </span>
+                                    {signal.requiresSubscription && signal.requiresSubscription !== 'free' && (
+                                        <span className="text-[10px] bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded uppercase font-bold">
+                                            {signal.requiresSubscription}
+                                        </span>
+                                    )}
                                     {signal.status === 'closed' && (
                                         <span className="text-[10px] bg-gray-700 text-gray-300 px-2 py-0.5 rounded">Closed</span>
                                     )}

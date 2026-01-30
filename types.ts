@@ -41,6 +41,7 @@ export interface Signal {
   analysis?: string;
   riskManagement?: string;
   proofImageUrl?: string; // URL to the PnL image uploaded by admin
+  requiresSubscription?: 'free' | 'basic' | 'pro' | 'elite'; // Tier requirement
 }
 
 export interface NotificationItem {

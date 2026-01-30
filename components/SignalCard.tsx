@@ -271,6 +271,12 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
     displayStatus === 'SL Hit' ? 'bg-red-500/10 text-red-400 border-red-500/10' :
     'bg-gray-700/50 text-gray-400 border-gray-600/30';
 
+  const tierBadgeColor = 
+    signal.requiresSubscription === 'basic' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+    signal.requiresSubscription === 'pro' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
+    signal.requiresSubscription === 'elite' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' : 
+    '';
+
   return (
     <>
       <div 
@@ -305,7 +311,14 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
           {/* Left Side: Pair & Badges */}
           <div className="flex flex-col gap-2">
-            <h3 className="text-xl font-bold text-white leading-tight tracking-tight">{signal.pair}</h3>
+            <h3 className="text-xl font-bold text-white leading-tight tracking-tight flex items-center gap-2">
+                {signal.pair}
+                {signal.requiresSubscription && signal.requiresSubscription !== 'free' && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide flex items-center gap-1 ${tierBadgeColor}`}>
+                        <Crown size={10} strokeWidth={3} /> {signal.requiresSubscription}
+                    </span>
+                )}
+            </h3>
             
             <div className="flex gap-1.5 flex-wrap items-center">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${signal.side === 'Long' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
@@ -366,7 +379,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 }`}
              >
                 {isLocked ? <Lock size={12} /> : <Lightbulb size={12} />}
-                <span className="text-[10px] font-bold uppercase tracking-wider">Analysis</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider">{isLocked ? 'Locked' : 'Analysis'}</span>
              </button>
         </div>
 
@@ -381,7 +394,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
             {signal.entry === 'Locked' ? (
                <div className="flex items-center gap-1.5">
                    <Lock className="w-3.5 h-3.5 text-gray-500 group-hover:text-emerald-400 transition-colors" />
-                   <span className="text-xs text-gray-500 font-medium group-hover:text-emerald-400 transition-colors">Locked</span>
+                   <span className="text-xs text-gray-500 font-medium group-hover:text-emerald-400 transition-colors">Upgrade</span>
                </div>
             ) : (
               <div className="flex items-center gap-1">
@@ -393,13 +406,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
 
           {/* Stop Loss Box */}
           <div 
-            onClick={!signal.slUnlock ? handleUnlockClick : undefined}
+            onClick={!signal.slUnlock || signal.stopLoss === 'Locked' ? handleUnlockClick : undefined}
             className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${
                 isSlHit ? 'border-red-500/50 bg-red-500/5' : 'border-dark-700/30'
-            } ${!signal.slUnlock ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
+            } ${!signal.slUnlock || signal.stopLoss === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
           >
              <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${isSlHit ? 'text-red-400' : 'text-gray-500'}`}>Stop Loss</span>
-              {signal.slUnlock ? (
+              {signal.slUnlock && signal.stopLoss !== 'Locked' ? (
                   <div className="flex items-center gap-1">
                        <span className={`${isSlHit ? 'text-red-500' : 'text-red-400'} font-mono font-medium text-sm`}>{signal.stopLoss}</span>
                        {renderCopyButton(signal.stopLoss, `sl-${signal.id}`)}
@@ -425,15 +438,15 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
               {displayTpTargets.map((tp, idx) => (
                 <div 
                   key={idx} 
-                  onClick={isLocked ? handleUnlockClick : undefined}
+                  onClick={tp.price === 'Locked' ? handleUnlockClick : undefined}
                   className={`py-2 px-1 rounded-lg text-xs font-medium text-center flex flex-col items-center justify-center gap-0.5 transition-all border ${
                       tp.hit 
                       ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)]' 
                       : 'bg-dark-900/40 text-gray-400 border-dark-700/50'
-                  } ${isLocked ? 'cursor-pointer hover:bg-dark-600 hover:border-emerald-500/30 group' : ''}`}
+                  } ${tp.price === 'Locked' ? 'cursor-pointer hover:bg-dark-600 hover:border-emerald-500/30 group' : ''}`}
                 >
                   <span className={`text-[9px] uppercase font-bold ${tp.hit ? 'text-emerald-500' : 'text-gray-600'}`}>TP {idx + 1}</span>
-                  {isLocked ? (
+                  {tp.price === 'Locked' ? (
                       <Lock size={12} className="text-gray-500 group-hover:text-emerald-400 mt-0.5" />
                   ) : (
                       <span className="font-mono">{tp.price}</span>
@@ -526,6 +539,37 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                     >
                         Understood
                     </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Upgrade / Unlock Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)}></div>
+            <div className="bg-dark-800 w-full max-w-sm rounded-3xl overflow-hidden border border-dark-700 shadow-2xl relative animate-in zoom-in-95 duration-200">
+                <div className="p-6 text-center">
+                    <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-yellow-500/30 shadow-[0_0_20px_rgba(234,179,8,0.2)]">
+                        <Crown size={32} className="text-yellow-500" fill="currentColor" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Premium Signal</h3>
+                    <p className="text-gray-400 text-sm mb-6">
+                        This specific trade requires a <strong>{signal.requiresSubscription?.toUpperCase() || 'PRO'}</strong> membership to view the Entry, Stop Loss, and Targets.
+                    </p>
+                    
+                    <div className="space-y-3">
+                        <button className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-dark-900 font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
+                            <Zap size={18} fill="currentColor" />
+                            Unlock Now
+                        </button>
+                        <button 
+                            onClick={() => setShowUpgradeModal(false)}
+                            className="w-full py-3 text-gray-500 font-medium hover:text-white transition-colors"
+                        >
+                            Maybe Later
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
