@@ -89,7 +89,14 @@ const SignalsView: React.FC<SignalsViewProps> = ({ onNavigate, signals, livePric
             <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
                 {filteredSignals.map((signal, idx) => {
                     const priceKey = signal.pair.replace('/', '').toUpperCase();
-                    return <SignalCard key={idx} signal={signal} livePrice={livePrices[priceKey]} />;
+                    return (
+                        <SignalCard 
+                            key={idx} 
+                            signal={signal} 
+                            livePrice={livePrices[priceKey]} 
+                            onUpgrade={() => onNavigate('subscription')} 
+                        />
+                    );
                 })}
             </div>
         )}

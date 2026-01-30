@@ -222,7 +222,15 @@ const App: React.FC = () => {
     const fetchSignals = async (isBackground = false) => {
       if (!isBackground) setIsLoadingSignals(true);
       try {
-        const response = await axios.get<Signal[]>('/api/signals');
+        // Retrieve user ID to send in header for Tier checking
+        const storedUser = localStorage.getItem('nexx_user');
+        const headers: any = {};
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            if (user.id) headers['x-user-id'] = user.id;
+        }
+
+        const response = await axios.get<Signal[]>('/api/signals', { headers });
         if (Array.isArray(response.data)) {
           setSignals(response.data);
         } else {

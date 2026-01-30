@@ -5,9 +5,10 @@ import { Signal } from '../types';
 interface SignalCardProps {
   signal: Signal;
   livePrice?: number;
+  onUpgrade?: () => void;
 }
 
-const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
+const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade }) => {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -559,7 +560,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                     </p>
                     
                     <div className="space-y-3">
-                        <button className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-dark-900 font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
+                        <button 
+                            onClick={onUpgrade}
+                            className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-dark-900 font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                        >
                             <Zap size={18} fill="currentColor" />
                             Unlock Now
                         </button>
