@@ -28,7 +28,7 @@ let dbConnected = false;
 
 // --- Web Push Configuration ---
 // Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
-const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '...';
 
 // We try to generate keys dynamically if they are clearly placeholders or missing
@@ -161,42 +161,17 @@ const monitorPrices = async () => {
             
             if (entryParts.length === 0) continue;
 
-            // For logic checks:
-            // Long Entry Trigger: Price enters zone (Price <= Max Entry)
-            // Short Entry Trigger: Price enters zone (Price >= Min Entry)
-            const entryMax = Math.max(...entryParts);
-            const entryMin = Math.min(...entryParts);
-            
             // For PnL calculation, use the first number as the anchor
             const entryCalc = entryParts[0];
             
             // --- A. Check Entry Condition ---
-            // If entry hasn't been hit yet, check if price is now within/crossed entry zone.
+            // If entry hasn't been hit yet, we now activate it immediately if we have a valid price.
+            // This satisfies "entry is below" (Long) and "entry is above" (Short) immediate commencement.
+            // Effectively, all active signals start tracking PnL immediately upon first price check.
             if (!signal.is_entry_hit) {
-                let entryTriggered = false;
-                
-                // Long: Triggers if price is below or equal to the top of the entry zone
-                // e.g. Entry 100-105. Price is 106 (Pending). Price drops to 104 (Triggered).
-                if (signal.side === 'Long' && currentPrice <= entryMax) entryTriggered = true;
-                
-                // Short: Triggers if price is above or equal to the bottom of the entry zone
-                // e.g. Entry 100-105. Price is 99 (Pending). Price rises to 101 (Triggered).
-                if (signal.side === 'Short' && currentPrice >= entryMin) entryTriggered = true;
-
-                if (entryTriggered) {
-                    await query('UPDATE signals SET is_entry_hit = TRUE WHERE id = $1', [signal.id]);
-                    console.log(`Entry filled for ${signal.pair} at ${currentPrice}`);
-                    
-                    // Notify User
-                    sendBroadcast('Entry Filled', `${signal.pair} has reached entry zone. Trade is active.`);
-                    // We continue to calculate PnL immediately in this same tick
-                } else {
-                    // Entry not hit yet: PnL is 0, skip SL/TP checks
-                    if (Number(signal.pnl_percentage) !== 0) {
-                         await query('UPDATE signals SET pnl_percentage = 0 WHERE id = $1', [signal.id]);
-                    }
-                    continue; // Skip SL/TP checks
-                }
+                await query('UPDATE signals SET is_entry_hit = TRUE WHERE id = $1', [signal.id]);
+                console.log(`Entry activated for ${signal.pair} at ${currentPrice}`);
+                sendBroadcast('Entry Active', `${signal.pair} trade is active.`);
             }
 
             // --- B. Calculate PnL (Entry is hit) ---
