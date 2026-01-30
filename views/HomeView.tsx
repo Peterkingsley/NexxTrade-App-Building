@@ -226,7 +226,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
         {proofSignals.length > 0 && (
             <div>
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white">PNL Proof</h2>
+                    <h2 className="text-xl font-bold text-white">Recent Trades</h2>
                     <button 
                         onClick={() => onNavigate('performance')}
                         className="text-brand-green text-sm font-medium flex items-center hover:opacity-80"
