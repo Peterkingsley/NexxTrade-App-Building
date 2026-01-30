@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Shield, Plus, X, Trash2, CheckCircle2, Megaphone, Video, FileText, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Shield, Plus, X, Trash2, CheckCircle2, Megaphone, Video, FileText, Loader2, Image as ImageIcon, Upload } from 'lucide-react';
 import { ViewState, Signal } from '../types';
 
 interface AdminViewProps {
@@ -32,7 +32,11 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
 
   const [closeSignalId, setCloseSignalId] = useState<string | null>(null);
   const [closePnl, setClosePnl] = useState('');
-  const [closeProofUrl, setCloseProofUrl] = useState('');
+  
+  // Proof Upload State
+  const [proofSignalId, setProofSignalId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userId = JSON.parse(localStorage.getItem('nexx_user') || '{}').id;
 
@@ -73,15 +77,13 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
       setIsLoading(true);
       try {
           await axios.put(`/api/admin/signals/${closeSignalId}/close`, { 
-              pnl: parseFloat(closePnl),
-              proofImageUrl: closeProofUrl || null
+              pnl: parseFloat(closePnl)
           }, { 
               headers: { 'x-user-id': userId } 
           });
           
           setCloseSignalId(null);
           setClosePnl('');
-          setCloseProofUrl('');
           fetchSignals();
       } catch (error) {
           alert('Failed to close signal');
@@ -97,6 +99,45 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
           fetchSignals();
       } catch (error) {
           alert('Failed to delete');
+      }
+  };
+
+  const handleProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0 || !proofSignalId) return;
+      
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          alert("File too large. Max 5MB.");
+          return;
+      }
+
+      setIsUploading(true);
+
+      try {
+          // 1. Convert to Base64
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = async () => {
+              const base64Image = reader.result as string;
+              
+              // 2. Upload to Server
+              const uploadRes = await axios.post('/api/admin/upload', { image: base64Image, filename: file.name }, { headers: { 'x-user-id': userId } });
+              const fileUrl = uploadRes.data.url;
+
+              // 3. Update Signal
+              await axios.put(`/api/admin/signals/${proofSignalId}/proof`, { proofImageUrl: fileUrl }, { headers: { 'x-user-id': userId } });
+              
+              setProofSignalId(null);
+              fetchSignals(); // Refresh UI
+              alert("Proof uploaded successfully!");
+          };
+      } catch (error) {
+          console.error(error);
+          alert("Failed to upload proof.");
+      } finally {
+          setIsUploading(false);
+          // Reset input
+          if (fileInputRef.current) fileInputRef.current.value = '';
       }
   };
 
@@ -219,49 +260,106 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
             {/* MANAGE SIGNALS */}
             {activeTab === 'manage-signals' && (
                 <div className="space-y-4">
+                    {/* Active & Closed Signals List */}
                     {activeSignals.map(signal => (
-                        <div key={signal.id} className="bg-dark-800 p-4 rounded-xl border border-dark-700 flex justify-between items-center">
+                        <div key={signal.id} className="bg-dark-800 p-4 rounded-xl border border-dark-700 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                             <div>
-                                <h3 className="font-bold text-lg">{signal.pair} <span className={`text-xs px-2 py-0.5 rounded ${signal.side === 'Long' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>{signal.side}</span></h3>
-                                <p className="text-xs text-gray-500">Status: {signal.status} | Entry: {signal.entry}</p>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-lg">{signal.pair}</h3>
+                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${signal.side === 'Long' ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' : 'bg-red-500/20 text-red-500 border-red-500/30'}`}>
+                                        {signal.side}
+                                    </span>
+                                    {signal.status === 'closed' && (
+                                        <span className="text-[10px] bg-gray-700 text-gray-300 px-2 py-0.5 rounded">Closed</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                    <span>Entry: {signal.entry}</span>
+                                    {signal.status === 'closed' && (
+                                        <span className={signal.pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                                            PnL: {signal.pnl}%
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                {signal.status === 'active' && (
-                                    <button onClick={() => setCloseSignalId(signal.id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold">Close</button>
+                            
+                            <div className="flex gap-2 flex-wrap">
+                                {signal.status === 'active' ? (
+                                    <button 
+                                        onClick={() => setCloseSignalId(signal.id)} 
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold flex items-center gap-1"
+                                    >
+                                        <CheckCircle2 size={14} /> Close Trade
+                                    </button>
+                                ) : (
+                                    // Button to attach proof for closed signals
+                                    <button 
+                                        onClick={() => setProofSignalId(signal.id)} 
+                                        className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 border transition-colors ${signal.proofImageUrl ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-dark-700 text-gray-300 border-dark-600 hover:bg-dark-600'}`}
+                                    >
+                                        <ImageIcon size={14} /> {signal.proofImageUrl ? 'Update Proof' : 'Attach Proof'}
+                                    </button>
                                 )}
-                                <button onClick={() => handleDeleteSignal(signal.id)} className="p-2 bg-dark-700 hover:bg-red-900/50 text-red-500 rounded-lg"><Trash2 size={18} /></button>
+                                <button 
+                                    onClick={() => handleDeleteSignal(signal.id)} 
+                                    className="p-2 bg-dark-700 hover:bg-red-900/50 text-red-500 rounded-lg border border-dark-600"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
                             </div>
                         </div>
                     ))}
 
+                    {/* Close Trade Modal */}
                     {closeSignalId && (
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
-                            <div className="bg-dark-800 p-6 rounded-2xl w-full max-w-sm border border-dark-700">
+                            <div className="bg-dark-800 p-6 rounded-2xl w-full max-w-sm border border-dark-700 animate-in zoom-in-95 duration-200">
                                 <h3 className="text-xl font-bold mb-4">Close Trade</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Final PnL %</label>
-                                        <input autoFocus type="number" placeholder="e.g. 15.5 or -4.2" value={closePnl} onChange={e => setClosePnl(e.target.value)} className="w-full bg-dark-900 p-4 rounded-xl border border-dark-600 outline-none text-xl font-mono" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Proof Image URL (Optional)</label>
-                                        <div className="relative">
-                                            <input 
-                                                type="text" 
-                                                placeholder="https://image-host.com/pnl.jpg" 
-                                                value={closeProofUrl} 
-                                                onChange={e => setCloseProofUrl(e.target.value)} 
-                                                className="w-full bg-dark-900 p-4 pl-10 rounded-xl border border-dark-600 outline-none text-sm" 
-                                            />
-                                            <ImageIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                        </div>
-                                        <p className="text-[10px] text-gray-500 mt-1">Paste a link to the PnL card image (e.g. from MEXC).</p>
-                                    </div>
+                                <div>
+                                    <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Final PnL %</label>
+                                    <input autoFocus type="number" placeholder="e.g. 15.5 or -4.2" value={closePnl} onChange={e => setClosePnl(e.target.value)} className="w-full bg-dark-900 p-4 rounded-xl border border-dark-600 outline-none text-xl font-mono" />
                                 </div>
                                 <div className="flex gap-2 mt-6">
-                                    <button onClick={() => setCloseSignalId(null)} className="flex-1 py-3 bg-dark-700 rounded-xl">Cancel</button>
-                                    <button onClick={handleCloseSignal} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">Confirm Close</button>
+                                    <button onClick={() => setCloseSignalId(null)} className="flex-1 py-3 bg-dark-700 rounded-xl hover:bg-dark-600 transition-colors">Cancel</button>
+                                    <button onClick={handleCloseSignal} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-colors">Confirm Close</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Proof Upload Modal */}
+                    {proofSignalId && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
+                            <div className="bg-dark-800 p-6 rounded-2xl w-full max-w-sm border border-dark-700 animate-in zoom-in-95 duration-200">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold">Upload PnL Proof</h3>
+                                    <button onClick={() => setProofSignalId(null)} className="text-gray-500 hover:text-white"><X size={20} /></button>
+                                </div>
+                                
+                                <div className="border-2 border-dashed border-dark-600 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-dark-700/30 transition-colors cursor-pointer relative">
+                                    {isUploading ? (
+                                        <div className="flex flex-col items-center">
+                                            <Loader2 className="animate-spin text-brand-green mb-2" size={32} />
+                                            <span className="text-sm text-gray-400">Uploading...</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Upload className="text-gray-500 mb-2" size={32} />
+                                            <span className="text-sm font-bold text-white mb-1">Tap to Upload</span>
+                                            <span className="text-xs text-gray-500">Max 5MB (PNG, JPG)</span>
+                                            <input 
+                                                ref={fileInputRef}
+                                                type="file" 
+                                                accept="image/*" 
+                                                onChange={handleProofUpload}
+                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                            />
+                                        </>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-4 text-center">
+                                    Upload the screenshot from your exchange app.
+                                </p>
                             </div>
                         </div>
                     )}

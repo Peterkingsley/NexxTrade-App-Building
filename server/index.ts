@@ -8,6 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import webpush from 'web-push'; // Requires: npm install web-push
 import axios from 'axios'; // Ensure axios is installed for server
+import { Buffer } from 'buffer';
 
 // Fix for __dirname in ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -21,10 +22,24 @@ const PORT = process.env.PORT || 3001;
 // Enable CORS
 // Explicitly cast cors middleware to match express types if mismatch occurs
 app.use(cors() as any);
-app.use(express.json() as any);
+// Increase payload limit for Base64 image uploads
+app.use(express.json({ limit: '10mb' }) as any);
 
 // Track DB Status
 let dbConnected = false;
+
+// --- File Upload Setup ---
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log("Created uploads directory at", uploadsDir);
+}
+
+// Serve uploads statically
+// Note: We cast static to any to avoid TS issues with Express types in some envs
+app.use('/uploads', express.static(uploadsDir) as any);
+
 
 // --- Web Push Configuration ---
 // Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
@@ -446,6 +461,60 @@ const initDb = async () => {
 };
 
 // --- API Routes ---
+
+// 1. Upload Handler (Base64 -> File System)
+app.post('/api/admin/upload', ensureAdmin, async (req: any, res: any) => {
+    if (!dbConnected) return res.json({ url: '/mock-image.png' });
+
+    const { image, filename } = req.body;
+    if (!image) return res.status(400).json({ error: 'No image data' });
+
+    try {
+        // Strip metadata if present (data:image/png;base64,...)
+        const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        
+        if (!matches || matches.length !== 3) {
+            return res.status(400).json({ error: 'Invalid base64 string' });
+        }
+
+        const buffer = Buffer.from(matches[2], 'base64');
+        const extension = matches[1].split('/')[1] || 'png';
+        const safeName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${extension}`;
+        const filePath = path.join(uploadsDir, safeName);
+
+        fs.writeFile(filePath, buffer, (err) => {
+            if (err) {
+                console.error("Write error:", err);
+                return res.status(500).json({ error: 'Failed to write file' });
+            }
+            
+            // Return URL path (assuming served from root or specific route)
+            // In development, Vite proxy handles /api, but static files need logic.
+            // Since we added app.use('/uploads', ...), the URL is /uploads/filename
+            const fileUrl = `/uploads/${safeName}`;
+            res.json({ url: fileUrl });
+        });
+    } catch (e) {
+        console.error("Upload error", e);
+        res.status(500).json({ error: 'Failed to upload' });
+    }
+});
+
+// 2. Update Proof URL Independent Endpoint
+app.put('/api/admin/signals/:id/proof', ensureAdmin, async (req: any, res: any) => {
+    if (!dbConnected) return res.json({ success: true });
+
+    const { id } = req.params;
+    const { proofImageUrl } = req.body;
+
+    try {
+        await query('UPDATE signals SET proof_image_url = $1 WHERE id = $2', [proofImageUrl, id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Update Proof Error:', error);
+        res.status(500).json({ error: 'Failed to update proof' });
+    }
+});
 
 // Proxy Price Endpoint (For Frontend Fallback)
 app.get('/api/prices/proxy', (req: any, res: any) => {
@@ -1183,9 +1252,15 @@ app.put('/api/admin/signals/:id/close', ensureAdmin, async (req: any, res: any) 
     try {
         await query(`
             UPDATE signals 
-            SET status = 'closed', pnl_percentage = $1, proof_image_url = $2, closed_at = NOW()
-            WHERE id = $3
-        `, [pnl, proofImageUrl, id]);
+            SET status = 'closed', pnl_percentage = $1, closed_at = NOW()
+            WHERE id = $2
+        `, [pnl, id]);
+        
+        // Optional: Update proof if provided during close (legacy support)
+        if (proofImageUrl) {
+             await query('UPDATE signals SET proof_image_url = $1 WHERE id = $2', [proofImageUrl, id]);
+        }
+        
         res.json({ success: true });
     } catch (error) {
         console.error('Close Signal Error:', error);
@@ -1284,10 +1359,10 @@ if (fs.existsSync(distPath)) {
     // Explicitly define types for req and res to match Express RequestHandler
     app.get(/.*/, (req: any, res: any) => {
         // Only serve index.html for non-API routes
-        if (!req.path.startsWith('/api')) {
+        if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
              res.sendFile(path.join(distPath, 'index.html'));
-        } else {
-             res.status(404).json({ error: 'API route not found' });
+        } else if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+             res.status(404).json({ error: 'Resource not found' });
         }
     });
 } else {
