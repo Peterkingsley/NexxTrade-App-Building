@@ -33,6 +33,14 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       return match ? parseFloat(match[0]) : NaN;
   };
 
+  // Helper to extract all numbers from a string (for ranges)
+  const parsePriceRange = (priceStr: string) => {
+      if (!priceStr || priceStr === 'Locked') return [];
+      const cleanStr = priceStr.replace(/,/g, '');
+      const matches = cleanStr.match(/[+-]?([0-9]*[.])?[0-9]+/g);
+      return matches ? matches.map(parseFloat) : [];
+  };
+
   // Helper to extract numeric leverage (e.g., "Cross 20x" -> 20)
   const getLeverage = (leverageStr?: string, type?: string) => {
       if (type === 'Spot' || !leverageStr) return 1;
@@ -60,75 +68,95 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       let tpSecured = false;
 
       // Only override if we have a live price, trade is active/open, and data isn't locked
-      // AND Entry has been hit (otherwise PnL is 0)
       if (livePrice && !isLocked && signal.status === 'active') {
-          const entryPrice = parsePrice(signal.entry);
+          // Parse Entry Range
+          const entryParts = parsePriceRange(signal.entry);
+          const entryMax = Math.max(...entryParts);
+          const entryMin = Math.min(...entryParts);
+          
+          // Use the first number as the PnL anchor (consistent with backend)
+          const entryPrice = entryParts.length > 0 ? entryParts[0] : NaN;
+          
           const stopLossPrice = parsePrice(signal.stopLoss);
           const leverage = getLeverage(signal.leverage, signal.type);
 
           if (!isNaN(entryPrice)) {
-              // 1. Calculate Derived TP Hits (DB + Live)
-              // We need to know which TPs are hit. We trust DB for past hits, and Live for current hits.
-              currentTpTargets = signal.tpTargets.map(tp => {
-                  const tpPrice = parsePrice(tp.price);
-                  let isHit = tp.hit; // Start with DB state
-                  
-                  if (!isNaN(tpPrice) && !isEntryPending) {
-                       if (signal.side === 'Long' && livePrice >= tpPrice) isHit = true;
-                       if (signal.side === 'Short' && livePrice <= tpPrice) isHit = true;
-                  }
-                  return { ...tp, hit: isHit, priceValue: tpPrice };
-              });
-
-              // Check if All TPs are hit
-              const areAllTpHit = currentTpTargets.length > 0 && currentTpTargets.every(tp => tp.hit);
+              // 0. Determine Local Active State
+              // If DB says pending, check if condition is NOW met to visually update card
+              let isLiveEntryHit = !isEntryPending; // Default to DB state
               
-              // Find highest TP hit index
-              let maxTpHitIndex = -1;
-              currentTpTargets.forEach((tp, idx) => {
-                  if (tp.hit) maxTpHitIndex = idx;
-              });
-              const isAnyTpHit = maxTpHitIndex !== -1;
-
-              // 2. Check Stop Loss
-              let liveSlHit = false;
-              if (!isNaN(stopLossPrice) && !isEntryPending) {
-                  if (signal.side === 'Long' && livePrice <= stopLossPrice) liveSlHit = true;
-                  if (signal.side === 'Short' && livePrice >= stopLossPrice) liveSlHit = true;
+              if (isEntryPending) {
+                   // Long: Active if Price <= Max Entry
+                   if (signal.side === 'Long' && livePrice <= entryMax) isLiveEntryHit = true;
+                   // Short: Active if Price >= Min Entry
+                   if (signal.side === 'Short' && livePrice >= entryMin) isLiveEntryHit = true;
               }
 
-              // 3. Determine Final Status and PnL
-              if (areAllTpHit) {
-                  currentStatus = 'closed';
-                  const finalTp = currentTpTargets[currentTpTargets.length - 1];
-                  // If all TPs hit, ROI is the last TP
-                  const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
-                  currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
-              } else if (liveSlHit) {
-                  // SL is physically hit (Frontend Simulation)
-                  // Note: Backend handles the official close and final PnL. This is for visual reactivity.
-                  if (isAnyTpHit) {
-                      // Logic: Hit TP1/2/3 then went to SL -> Close as Profitable at highest TP hit
-                      currentStatus = 'closed';
-                      tpSecured = true;
+              if (isLiveEntryHit) {
+                  // 1. Calculate Derived TP Hits (DB + Live)
+                  // We need to know which TPs are hit. We trust DB for past hits, and Live for current hits.
+                  currentTpTargets = signal.tpTargets.map(tp => {
+                      const tpPrice = parsePrice(tp.price);
+                      let isHit = tp.hit; // Start with DB state
                       
-                      // Calculate PnL based on highest TP Hit (Secured Profit)
-                      const maxTp = currentTpTargets[maxTpHitIndex];
-                      const priceToUse = !isNaN(parsePrice(maxTp.price)) ? parsePrice(maxTp.price) : entryPrice;
-                      currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
-                  } else {
-                      // Pure Loss (No TP hit)
-                      slHit = true;
-                      currentStatus = 'SL Hit';
-                      currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side, leverage);
+                      if (!isNaN(tpPrice)) {
+                           if (signal.side === 'Long' && livePrice >= tpPrice) isHit = true;
+                           if (signal.side === 'Short' && livePrice <= tpPrice) isHit = true;
+                      }
+                      return { ...tp, hit: isHit, priceValue: tpPrice };
+                  });
+
+                  // Check if All TPs are hit
+                  const areAllTpHit = currentTpTargets.length > 0 && currentTpTargets.every(tp => tp.hit);
+                  
+                  // Find highest TP hit index
+                  let maxTpHitIndex = -1;
+                  currentTpTargets.forEach((tp, idx) => {
+                      if (tp.hit) maxTpHitIndex = idx;
+                  });
+                  const isAnyTpHit = maxTpHitIndex !== -1;
+
+                  // 2. Check Stop Loss
+                  let liveSlHit = false;
+                  if (!isNaN(stopLossPrice)) {
+                      if (signal.side === 'Long' && livePrice <= stopLossPrice) liveSlHit = true;
+                      if (signal.side === 'Short' && livePrice >= stopLossPrice) liveSlHit = true;
                   }
-              } else if (isEntryPending) {
+
+                  // 3. Determine Final Status and PnL
+                  if (areAllTpHit) {
+                      currentStatus = 'closed';
+                      const finalTp = currentTpTargets[currentTpTargets.length - 1];
+                      // If all TPs hit, ROI is the last TP
+                      const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
+                      currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
+                  } else if (liveSlHit) {
+                      // SL is physically hit (Frontend Simulation)
+                      // Note: Backend handles the official close and final PnL. This is for visual reactivity.
+                      if (isAnyTpHit) {
+                          // Logic: Hit TP1/2/3 then went to SL -> Close as Profitable at highest TP hit
+                          currentStatus = 'closed';
+                          tpSecured = true;
+                          
+                          // Calculate PnL based on highest TP Hit (Secured Profit)
+                          const maxTp = currentTpTargets[maxTpHitIndex];
+                          const priceToUse = !isNaN(parsePrice(maxTp.price)) ? parsePrice(maxTp.price) : entryPrice;
+                          currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
+                      } else {
+                          // Pure Loss (No TP hit)
+                          slHit = true;
+                          currentStatus = 'SL Hit';
+                          currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side, leverage);
+                      }
+                  } else {
+                      // Trade Active - Floating PnL
+                      currentStatus = 'active';
+                      currentPnl = calculatePnl(entryPrice, livePrice, signal.side, leverage);
+                  }
+              } else {
+                  // Still Pending
                   currentStatus = 'pending';
                   currentPnl = 0;
-              } else {
-                  // Trade Active - Floating PnL
-                  currentStatus = 'active';
-                  currentPnl = calculatePnl(entryPrice, livePrice, signal.side, leverage);
               }
           }
       }
@@ -238,7 +266,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
 
   const pnlColorClass = displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
   const statusColorClass = 
-    isEntryPending ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+    displayStatus === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
     displayStatus === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' :
     displayStatus === 'SL Hit' ? 'bg-red-500/10 text-red-400 border-red-500/10' :
     'bg-gray-700/50 text-gray-400 border-gray-600/30';
@@ -250,10 +278,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         className={`bg-dark-800 rounded-2xl p-4 border border-dark-700/50 shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col ${isClosed ? 'cursor-pointer hover:bg-dark-700 hover:border-dark-600 hover:shadow-emerald-900/10 hover:shadow-xl' : ''}`}
       >
         {/* Background glow for active signals */}
-        {displayStatus === 'active' && !isEntryPending && (
+        {displayStatus === 'active' && (
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         )}
-        {isEntryPending && (
+        {displayStatus === 'pending' && (
              <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         )}
         {isSlHit && (
@@ -291,14 +319,14 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 )}
                 
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${statusColorClass}`}>
-                    {isEntryPending ? 'Pending' : displayStatus}
+                    {displayStatus}
                 </span>
             </div>
           </div>
           
           {/* Right Side: PnL & Price */}
           <div className="flex flex-col items-end shrink-0">
-             {isEntryPending ? (
+             {displayStatus === 'pending' ? (
                  <span className="text-xl font-bold tracking-tight text-gray-400">Waiting</span>
              ) : (
                  <span className={`text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
@@ -325,7 +353,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         {/* Time & Analysis Row */}
         <div className="flex justify-between items-center mb-4 relative z-10">
             <div className="flex items-center gap-1.5 text-gray-400">
-                <div className={`w-1.5 h-1.5 rounded-full ${displayStatus === 'active' && !isEntryPending ? 'bg-emerald-500 animate-pulse' : displayStatus === 'SL Hit' ? 'bg-red-500' : isEntryPending ? 'bg-yellow-500' : 'bg-gray-600'}`}></div>
+                <div className={`w-1.5 h-1.5 rounded-full ${displayStatus === 'active' ? 'bg-emerald-500 animate-pulse' : displayStatus === 'SL Hit' ? 'bg-red-500' : displayStatus === 'pending' ? 'bg-yellow-500' : 'bg-gray-600'}`}></div>
                 <p className="text-xs font-medium">{signal.timeAgo}</p>
             </div>
             
@@ -347,9 +375,9 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           {/* Entry Box */}
           <div 
             onClick={signal.entry === 'Locked' ? handleUnlockClick : undefined}
-            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${isEntryPending ? 'border-yellow-500/30' : 'border-dark-700/30'} ${signal.entry === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
+            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${displayStatus === 'pending' ? 'border-yellow-500/30' : 'border-dark-700/30'} ${signal.entry === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
           >
-            <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${isEntryPending ? 'text-yellow-500' : 'text-gray-500'}`}>Entry Zone</span>
+            <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${displayStatus === 'pending' ? 'text-yellow-500' : 'text-gray-500'}`}>Entry Zone</span>
             {signal.entry === 'Locked' ? (
                <div className="flex items-center gap-1.5">
                    <Lock className="w-3.5 h-3.5 text-gray-500 group-hover:text-emerald-400 transition-colors" />
@@ -417,7 +445,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         )}
         
         {/* Alerts / Status Messages */}
-        {isEntryPending && (
+        {displayStatus === 'pending' && (
             <div className="mt-3 bg-yellow-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-yellow-500/20 relative z-10">
                 <Clock size={12} className="text-yellow-500" />
                 <span className="text-[10px] font-medium text-yellow-400">Waiting for Entry Price</span>
