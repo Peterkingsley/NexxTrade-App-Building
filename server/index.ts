@@ -464,7 +464,8 @@ const initDb = async () => {
 
 // 1. Upload Handler (Base64 -> File System)
 app.post('/api/admin/upload', ensureAdmin, async (req: any, res: any) => {
-    if (!dbConnected) return res.json({ url: '/mock-image.png' });
+    // If DB is not connected, use a public placeholder service so UI doesn't break
+    if (!dbConnected) return res.json({ url: 'https://placehold.co/600x800/10B981/ffffff?text=PnL+Proof' });
 
     const { image, filename } = req.body;
     if (!image) return res.status(400).json({ error: 'No image data' });
