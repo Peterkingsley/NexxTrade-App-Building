@@ -1035,7 +1035,7 @@ app.get('/api/signals', async (req: any, res: any) => {
            FROM signal_targets st WHERE st.signal_id = s.id), '[]'::json
         ) as "tpTargets"
       FROM signals s
-      ORDER BY s.created_at DESC
+      ORDER BY (CASE WHEN s.status = 'active' THEN 0 ELSE 1 END) ASC, s.created_at DESC
     `);
 
     const signals = result.rows.map(row => {
