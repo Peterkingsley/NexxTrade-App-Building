@@ -28,7 +28,7 @@ let dbConnected = false;
 
 // --- Web Push Configuration ---
 // Generate keys if not present (Note: In production, these should be static env vars to persist subscriptions)
-const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'BInyTfJ0w_5yXq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8Xq3a7T9j8'; // Placeholder if missing
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '...';
 
 // We try to generate keys dynamically if they are clearly placeholders or missing
@@ -350,6 +350,7 @@ const initDb = async () => {
                 analysis_text TEXT,
                 risk_management_text TEXT,
                 chart_image_url TEXT,
+                proof_image_url TEXT,
                 is_sl_unlocked BOOLEAN DEFAULT TRUE,
                 requires_subscription VARCHAR(20) DEFAULT 'free',
                 is_entry_hit BOOLEAN DEFAULT FALSE,
@@ -362,8 +363,9 @@ const initDb = async () => {
         // Migration: Add leverage column if it doesn't exist
         try {
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS leverage VARCHAR(20)`);
-            // Migration for entry tracking
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_entry_hit BOOLEAN DEFAULT FALSE`);
+            // Add proof image column
+            await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS proof_image_url TEXT`);
         } catch (e) {
             console.log('Note: column check', (e as Error).message);
         }
@@ -955,6 +957,7 @@ app.get('/api/signals', async (req: any, res: any) => {
         s.is_entry_hit as "isEntryHit",
         s.analysis_text as analysis,
         s.risk_management_text as "riskManagement",
+        s.proof_image_url as "proofImageUrl",
         s.created_at,
         s.closed_at as "closedAt",
         COALESCE(
@@ -1175,14 +1178,14 @@ app.put('/api/admin/signals/:id/close', ensureAdmin, async (req: any, res: any) 
     if (!dbConnected) return res.json({ success: true });
 
     const { id } = req.params;
-    const { pnl } = req.body;
+    const { pnl, proofImageUrl } = req.body;
 
     try {
         await query(`
             UPDATE signals 
-            SET status = 'closed', pnl_percentage = $1, closed_at = NOW()
-            WHERE id = $2
-        `, [pnl, id]);
+            SET status = 'closed', pnl_percentage = $1, proof_image_url = $2, closed_at = NOW()
+            WHERE id = $3
+        `, [pnl, proofImageUrl, id]);
         res.json({ success: true });
     } catch (error) {
         console.error('Close Signal Error:', error);

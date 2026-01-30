@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, Bell, Ribbon, TrendingUp, Activity, BarChart2, ChevronDown, Target, Trophy, Loader2, AlertCircle } from 'lucide-react';
+import { MessageSquare, Bell, Ribbon, TrendingUp, Activity, BarChart2, ChevronDown, Target, Trophy, Loader2, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, LineChart, Line, BarChart as RechartsBarChart, Bar } from 'recharts';
+import PnLProofCard from '../components/PnLProofCard';
 import { ViewState, Signal } from '../types';
 
 interface PerformanceViewProps {
@@ -70,6 +71,13 @@ const PerformanceView: React.FC<PerformanceViewProps> = ({ onNavigate, signals, 
         .sort((a, b) => b.pnl - a.pnl)
         .slice(0, 5); // Top 5
 
+    // 4. Proofs
+    const proofs = closedSignals.filter(s => s.proofImageUrl).sort((a, b) => {
+        const dateA = a.closedAt ? new Date(a.closedAt).getTime() : 0;
+        const dateB = b.closedAt ? new Date(b.closedAt).getTime() : 0;
+        return dateB - dateA; // Newest first
+    });
+
     return {
         totalClosed,
         wins,
@@ -77,6 +85,7 @@ const PerformanceView: React.FC<PerformanceViewProps> = ({ onNavigate, signals, 
         netProfit,
         equityCurve,
         topPairs,
+        proofs,
         hasData: totalClosed > 0
     };
   }, [signals, timeRange]);
@@ -361,6 +370,23 @@ const PerformanceView: React.FC<PerformanceViewProps> = ({ onNavigate, signals, 
                         </ResponsiveContainer>
                     </div>
                 </div>
+
+                {/* PNL PROOF GALLERY */}
+                {performanceData.proofs.length > 0 && (
+                    <div className="mt-8">
+                        <div className="flex items-center gap-2 mb-6">
+                            <ImageIcon className="text-brand-green" />
+                            <h3 className="text-white font-bold text-xl">Win Gallery</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {performanceData.proofs.map((signal, idx) => (
+                                <div key={idx} className="w-full">
+                                    <PnLProofCard signal={signal} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </>
         )}
       </div>

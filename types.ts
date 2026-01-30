@@ -40,6 +40,7 @@ export interface Signal {
   isEntryHit?: boolean; // New field to track if price reached entry
   analysis?: string;
   riskManagement?: string;
+  proofImageUrl?: string; // URL to the PnL image uploaded by admin
 }
 
 export interface NotificationItem {

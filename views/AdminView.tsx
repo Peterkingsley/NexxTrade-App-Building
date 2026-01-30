@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Plus, X, Trash2, CheckCircle2, Megaphone, Video, FileText, Loader2 } from 'lucide-react';
+import { Shield, Plus, X, Trash2, CheckCircle2, Megaphone, Video, FileText, Loader2, Image as ImageIcon } from 'lucide-react';
 import { ViewState, Signal } from '../types';
 
 interface AdminViewProps {
@@ -32,6 +32,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
 
   const [closeSignalId, setCloseSignalId] = useState<string | null>(null);
   const [closePnl, setClosePnl] = useState('');
+  const [closeProofUrl, setCloseProofUrl] = useState('');
 
   const userId = JSON.parse(localStorage.getItem('nexx_user') || '{}').id;
 
@@ -71,9 +72,16 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
       if (!closeSignalId || !closePnl) return;
       setIsLoading(true);
       try {
-          await axios.put(`/api/admin/signals/${closeSignalId}/close`, { pnl: parseFloat(closePnl) }, { headers: { 'x-user-id': userId } });
+          await axios.put(`/api/admin/signals/${closeSignalId}/close`, { 
+              pnl: parseFloat(closePnl),
+              proofImageUrl: closeProofUrl || null
+          }, { 
+              headers: { 'x-user-id': userId } 
+          });
+          
           setCloseSignalId(null);
           setClosePnl('');
+          setCloseProofUrl('');
           fetchSignals();
       } catch (error) {
           alert('Failed to close signal');
@@ -230,8 +238,27 @@ const AdminView: React.FC<AdminViewProps> = ({ onNavigate }) => {
                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
                             <div className="bg-dark-800 p-6 rounded-2xl w-full max-w-sm border border-dark-700">
                                 <h3 className="text-xl font-bold mb-4">Close Trade</h3>
-                                <input autoFocus type="number" placeholder="Final PnL % (e.g. 15.5 or -4.2)" value={closePnl} onChange={e => setClosePnl(e.target.value)} className="w-full bg-dark-900 p-4 rounded-xl border border-dark-600 mb-4 outline-none text-xl font-mono" />
-                                <div className="flex gap-2">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Final PnL %</label>
+                                        <input autoFocus type="number" placeholder="e.g. 15.5 or -4.2" value={closePnl} onChange={e => setClosePnl(e.target.value)} className="w-full bg-dark-900 p-4 rounded-xl border border-dark-600 outline-none text-xl font-mono" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Proof Image URL (Optional)</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                placeholder="https://image-host.com/pnl.jpg" 
+                                                value={closeProofUrl} 
+                                                onChange={e => setCloseProofUrl(e.target.value)} 
+                                                className="w-full bg-dark-900 p-4 pl-10 rounded-xl border border-dark-600 outline-none text-sm" 
+                                            />
+                                            <ImageIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-1">Paste a link to the PnL card image (e.g. from MEXC).</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-6">
                                     <button onClick={() => setCloseSignalId(null)} className="flex-1 py-3 bg-dark-700 rounded-xl">Cancel</button>
                                     <button onClick={handleCloseSignal} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">Confirm Close</button>
                                 </div>

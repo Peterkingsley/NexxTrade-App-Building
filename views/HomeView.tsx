@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Bell, ChevronRight, Megaphone, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import SignalCard from '../components/SignalCard';
+import PnLProofCard from '../components/PnLProofCard';
 import { Signal, ViewState, NotificationItem } from '../types';
 
 interface HomeViewProps {
@@ -97,6 +98,11 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
         totalProfit: totalProfit,
         totalTrades: closed.length
     };
+  }, [signals]);
+
+  // Filter Signals with Proof Images
+  const proofSignals = useMemo(() => {
+      return signals.filter(s => s.proofImageUrl && s.status === 'closed');
   }, [signals]);
 
   return (
@@ -215,6 +221,29 @@ const HomeView: React.FC<HomeViewProps> = ({ onNavigate, signals, livePrices, is
                 <p className="text-gray-500 text-xs font-medium">Since inception</p>
             </div>
         </div>
+
+        {/* PNL PROOF CAROUSEL - NEW SECTION */}
+        {proofSignals.length > 0 && (
+            <div>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-white">PNL Proof</h2>
+                    <button 
+                        onClick={() => onNavigate('performance')}
+                        className="text-brand-green text-sm font-medium flex items-center hover:opacity-80"
+                    >
+                        See All <ChevronRight size={16} />
+                    </button>
+                </div>
+                
+                <div className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide -mx-4 px-4 snap-x snap-mandatory">
+                    {proofSignals.slice(0, 5).map((signal, idx) => (
+                        <div key={idx} className="snap-center">
+                            <PnLProofCard signal={signal} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
 
         {/* Latest Signals */}
         <div>
