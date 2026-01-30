@@ -143,6 +143,7 @@ const monitorPrices = async () => {
 
     try {
         // 1. Fetch Active Signals with their Targets
+        // We explicitly select 'is_entry_hit' which acts as our persistent state
         const activeSignalsRes = await query(`
             SELECT 
                 s.id, s.pair, s.type, s.side, s.leverage, s.entry_price_display, s.stop_loss_price, s.pnl_percentage, s.is_entry_hit,
@@ -213,21 +214,22 @@ const monitorPrices = async () => {
             // For PnL calculation, use the first number as the anchor
             const entryCalc = entryParts[0];
             
-            // --- A. Check Entry Condition ---
-            // If entry hasn't been hit yet, check if price is now within/crossed entry zone.
+            // --- A. Check Entry Condition (PERSISTENCE LAYER) ---
+            // If entry hasn't been hit yet (according to DB), check if price is now within/crossed entry zone.
+            // If DB says it's hit, we SKIP this block and proceed to PnL, ensuring we don't "restart" logic.
             if (!signal.is_entry_hit) {
                 let entryTriggered = false;
                 
                 // Long: Triggers if price is below or equal to the top of the entry zone
-                // User requirement: "Long BTC at 90... current below 90 automatically start"
                 if (signal.side === 'Long' && currentPrice <= entryMax) entryTriggered = true;
                 
                 // Short: Triggers if price is above or equal to the bottom of the entry zone
-                // User requirement: "Short at 89... current above 89... start"
                 if (signal.side === 'Short' && currentPrice >= entryMin) entryTriggered = true;
 
                 if (entryTriggered) {
-                    await query('UPDATE signals SET is_entry_hit = TRUE WHERE id = $1', [signal.id]);
+                    // PERSIST STATE: Update DB immediately so even if server restarts, we know entry was hit.
+                    // We also record the timestamp for auditing.
+                    await query('UPDATE signals SET is_entry_hit = TRUE, entry_hit_at = NOW() WHERE id = $1', [signal.id]);
                     console.log(`Entry filled for ${signal.pair} at ${currentPrice}`);
                     
                     // Notify User
@@ -235,7 +237,6 @@ const monitorPrices = async () => {
                     // We continue to calculate PnL immediately in this same tick
                 } else {
                     // Entry not hit yet: PnL is 0, skip SL/TP checks
-                    // Reset PnL if it was previously set (unlikely but safe)
                     if (Number(signal.pnl_percentage) !== 0) {
                          await query('UPDATE signals SET pnl_percentage = 0 WHERE id = $1', [signal.id]);
                     }
@@ -262,8 +263,7 @@ const monitorPrices = async () => {
             }
 
             if (slHit) {
-                // Calculate Final PnL based on SL Price (Fixed Loss), not current wick
-                // This ensures the recorded ROI matches the Stop Loss exactly.
+                // Calculate Final PnL based on SL Price (Fixed Loss)
                 let finalPnl = 0;
                 if (signal.side === 'Long') {
                     finalPnl = ((stopLoss - entryCalc) / entryCalc) * 100 * leverage;
@@ -397,6 +397,7 @@ const initDb = async () => {
                 is_sl_unlocked BOOLEAN DEFAULT TRUE,
                 requires_subscription VARCHAR(20) DEFAULT 'free',
                 is_entry_hit BOOLEAN DEFAULT FALSE,
+                entry_hit_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 closed_at TIMESTAMPTZ,
                 created_by UUID REFERENCES users(id)
@@ -407,6 +408,7 @@ const initDb = async () => {
         try {
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS leverage VARCHAR(20)`);
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_entry_hit BOOLEAN DEFAULT FALSE`);
+            await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS entry_hit_at TIMESTAMPTZ`);
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS proof_image_url TEXT`);
             await query(`ALTER TABLE signals ADD COLUMN IF NOT EXISTS requires_subscription VARCHAR(20) DEFAULT 'free'`);
         } catch (e) {
@@ -1354,5 +1356,5 @@ const startServer = async () => {
 // Catch any unhandled startup errors
 startServer().catch(err => {
     console.error("Failed to start server:", err);
-    process.exit(1);
+    (process as any).exit(1);
 });
