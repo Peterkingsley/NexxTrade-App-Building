@@ -27,9 +27,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   
   const parsePrice = (priceStr: string) => {
       if (!priceStr || priceStr === 'Locked') return NaN;
-      // Remove commas, take first numeric sequence if range "2000-2050" -> 2000
-      const clean = priceStr.replace(/,/g, '').split('-')[0].trim();
-      return parseFloat(clean);
+      // Robust Regex Number Extraction: matches 123, 123.45, 1,234.56
+      // Handles ranges like "2000-2050" by taking the first number
+      const match = priceStr.replace(/,/g, '').match(/[+-]?([0-9]*[.])?[0-9]+/);
+      return match ? parseFloat(match[0]) : NaN;
   };
 
   // Helper to extract numeric leverage (e.g., "Cross 20x" -> 20)

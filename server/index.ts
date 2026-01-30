@@ -20,8 +20,8 @@ const PORT = process.env.PORT || 3001;
 
 // Enable CORS
 // Explicitly cast cors middleware to match express types if mismatch occurs
-app.use(cors());
-app.use(express.json());
+app.use(cors() as any);
+app.use(express.json() as any);
 
 // Track DB Status
 let dbConnected = false;
@@ -86,6 +86,15 @@ const ensureAdmin = async (req: any, res: any, next: any) => {
 // In-Memory Cache for Proxy Endpoint
 const priceCache: Record<string, number> = {};
 
+// Helper to reliably extract numbers from strings like "$2,000 - $2,100" or "Entry: 50.5"
+const extractNumbers = (str: string): number[] => {
+    if (!str) return [];
+    // Remove commas to handle "1,000", then match float pattern
+    const cleanStr = str.replace(/,/g, '');
+    const matches = cleanStr.match(/[+-]?([0-9]*[.])?[0-9]+/g);
+    return matches ? matches.map(parseFloat) : [];
+};
+
 const monitorPrices = async () => {
     if (!dbConnected) return; // Skip if no DB
 
@@ -144,33 +153,34 @@ const monitorPrices = async () => {
             
             if (!currentPrice) continue;
 
-            // Parse Numbers
-            // Support ranges like "200-205". Split by '-' and parse numbers.
-            const entryParts = signal.entry_price_display.replace(/,/g, '').split('-').map((s: string) => parseFloat(s.trim())).filter((n: number) => !isNaN(n));
+            // Robust Number Parsing using Regex
+            const entryParts = extractNumbers(signal.entry_price_display);
+            const stopLossParts = extractNumbers(signal.stop_loss_price);
+            const stopLoss = stopLossParts.length > 0 ? stopLossParts[0] : NaN;
+            const leverage = parseInt(signal.leverage?.match(/\d+/)?.[0] || '1');
             
+            if (entryParts.length === 0) continue;
+
             // For logic checks:
             // Long Entry Trigger: Price enters zone (Price <= Max Entry)
             // Short Entry Trigger: Price enters zone (Price >= Min Entry)
             const entryMax = Math.max(...entryParts);
             const entryMin = Math.min(...entryParts);
             
-            // For PnL calculation, use the first number as the anchor (or average could be used)
-            const entryCalc = entryParts.length > 0 ? entryParts[0] : NaN;
+            // For PnL calculation, use the first number as the anchor
+            const entryCalc = entryParts[0];
             
-            const stopLoss = parseFloat(signal.stop_loss_price.replace(/,/g, '').trim());
-            const leverage = parseInt(signal.leverage?.match(/\d+/)?.[0] || '1');
-            
-            if (isNaN(entryCalc)) continue;
-
             // --- A. Check Entry Condition ---
             // If entry hasn't been hit yet, check if price is now within/crossed entry zone.
             if (!signal.is_entry_hit) {
                 let entryTriggered = false;
                 
-                // Long: Triggers if price touches the zone from above (<= entryMax)
+                // Long: Triggers if price is below or equal to the top of the entry zone
+                // e.g. Entry 100-105. Price is 106 (Pending). Price drops to 104 (Triggered).
                 if (signal.side === 'Long' && currentPrice <= entryMax) entryTriggered = true;
                 
-                // Short: Triggers if price touches the zone from below (>= entryMin)
+                // Short: Triggers if price is above or equal to the bottom of the entry zone
+                // e.g. Entry 100-105. Price is 99 (Pending). Price rises to 101 (Triggered).
                 if (signal.side === 'Short' && currentPrice >= entryMin) entryTriggered = true;
 
                 if (entryTriggered) {
@@ -179,6 +189,7 @@ const monitorPrices = async () => {
                     
                     // Notify User
                     sendBroadcast('Entry Filled', `${signal.pair} has reached entry zone. Trade is active.`);
+                    // We continue to calculate PnL immediately in this same tick
                 } else {
                     // Entry not hit yet: PnL is 0, skip SL/TP checks
                     if (Number(signal.pnl_percentage) !== 0) {
@@ -238,7 +249,9 @@ const monitorPrices = async () => {
                     continue;
                 }
 
-                const tpPrice = parseFloat(target.target_price.replace(/,/g, '').trim());
+                const tpPriceArr = extractNumbers(target.target_price);
+                const tpPrice = tpPriceArr.length > 0 ? tpPriceArr[0] : NaN;
+                
                 if (isNaN(tpPrice)) continue;
 
                 let hit = false;
@@ -1260,7 +1273,7 @@ const distPath = path.resolve(__dirname, '..', 'dist');
 console.log('Serving static files from:', distPath);
 
 if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
+    app.use(express.static(distPath) as any);
 
     // Handle React routing, return all requests to React app
     // Use Regex /.*/ to match all routes, avoiding Express 5 string path syntax issues
