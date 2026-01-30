@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { query, waitForDatabase } from './db';
@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3001;
 
 // Enable CORS
 // Explicitly cast cors middleware to match express types if mismatch occurs
-app.use(cors() as express.RequestHandler);
+app.use(cors());
 app.use(express.json());
 
 // Track DB Status
@@ -56,12 +56,12 @@ const generateReferralCode = () => {
     return 'NEXX-' + crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
-const getUserId = (req: Request): string | null => {
+const getUserId = (req: any): string | null => {
     const userId = req.headers['x-user-id'];
     return typeof userId === 'string' ? userId : null;
 };
 
-const ensureAdmin = async (req: Request, res: Response, next: NextFunction) => {
+const ensureAdmin = async (req: any, res: any, next: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -201,9 +201,9 @@ const monitorPrices = async () => {
 
             // --- C. Check Stop Loss ---
             let slHit = false;
-            if (!isNaN(stopLossPrice)) {
-                if (signal.side === 'Long' && currentPrice <= stopLossPrice) slHit = true;
-                if (signal.side === 'Short' && currentPrice >= stopLossPrice) slHit = true;
+            if (!isNaN(stopLoss)) {
+                if (signal.side === 'Long' && currentPrice <= stopLoss) slHit = true;
+                if (signal.side === 'Short' && currentPrice >= stopLoss) slHit = true;
             }
 
             if (slHit) {
@@ -432,17 +432,17 @@ const initDb = async () => {
 // --- API Routes ---
 
 // Proxy Price Endpoint (For Frontend Fallback)
-app.get('/api/prices/proxy', (req: Request, res: Response) => {
+app.get('/api/prices/proxy', (req: any, res: any) => {
     res.json(priceCache);
 });
 
 // GET Public VAPID Key for Frontend
-app.get('/api/push/vapid-public-key', (req: Request, res: Response) => {
+app.get('/api/push/vapid-public-key', (req: any, res: any) => {
     res.json({ publicKey: vapidKeys.publicKey });
 });
 
 // POST Subscribe to Push Notifications
-app.post('/api/push/subscribe', async (req: Request, res: Response) => {
+app.post('/api/push/subscribe', async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true }); // Mock success
 
     const userId = getUserId(req);
@@ -467,7 +467,7 @@ app.post('/api/push/subscribe', async (req: Request, res: Response) => {
 });
 
 // GET Current User Profile (Refresh Session)
-app.get('/api/auth/me', async (req: Request, res: Response) => {
+app.get('/api/auth/me', async (req: any, res: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -518,7 +518,7 @@ app.get('/api/auth/me', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+app.post('/api/auth/login', async (req: any, res: any) => {
     const { provider, email, firstName, lastName, username, photoUrl, providerId } = req.body;
 
     // --- Mock Login if DB is down ---
@@ -660,7 +660,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 });
 
 // GET Notification Settings
-app.get('/api/user/settings/notifications', async (req: Request, res: Response) => {
+app.get('/api/user/settings/notifications', async (req: any, res: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -682,7 +682,7 @@ app.get('/api/user/settings/notifications', async (req: Request, res: Response) 
 });
 
 // UPDATE Notification Settings
-app.put('/api/user/settings/notifications', async (req: Request, res: Response) => {
+app.put('/api/user/settings/notifications', async (req: any, res: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     
@@ -700,7 +700,7 @@ app.put('/api/user/settings/notifications', async (req: Request, res: Response) 
 });
 
 // GET All Notifications (Global + User Specific)
-app.get('/api/notifications', async (req: Request, res: Response) => {
+app.get('/api/notifications', async (req: any, res: any) => {
     const userId = getUserId(req);
     
     if (!dbConnected) {
@@ -727,7 +727,7 @@ app.get('/api/notifications', async (req: Request, res: Response) => {
 });
 
 // New endpoint to link an account from profile settings (enforces uniqueness)
-app.post('/api/user/link-account', async (req: Request, res: Response) => {
+app.post('/api/user/link-account', async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true });
 
     const userId = getUserId(req);
@@ -773,7 +773,7 @@ app.post('/api/user/link-account', async (req: Request, res: Response) => {
 });
 
 // GET Subscription Details
-app.get('/api/user/subscription', async (req: Request, res: Response) => {
+app.get('/api/user/subscription', async (req: any, res: any) => {
     if (!dbConnected) return res.json({plan: 'free', expiry: null});
 
     try {
@@ -796,7 +796,7 @@ app.get('/api/user/subscription', async (req: Request, res: Response) => {
 });
 
 // Claim Referral Code Endpoint
-app.post('/api/referrals/claim', async (req: Request, res: Response) => {
+app.post('/api/referrals/claim', async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true });
 
     const userId = getUserId(req);
@@ -836,7 +836,7 @@ app.post('/api/referrals/claim', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/api/signals', async (req: Request, res: Response) => {
+app.get('/api/signals', async (req: any, res: any) => {
   // If DB not connected, return mock data directly from server
   // This prevents frontend 500 errors and "Signal fetch failed" messages
   if (!dbConnected) {
@@ -977,7 +977,7 @@ app.get('/api/signals', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/referrals/my-stats', async (req: Request, res: Response) => {
+app.get('/api/referrals/my-stats', async (req: any, res: any) => {
     if (!dbConnected) return res.json({pendingBalance: 0, totalEarnings: 0, totalReferrals: 0, referralCode: 'DEMO-123'});
 
     try {
@@ -1013,7 +1013,7 @@ app.get('/api/referrals/my-stats', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/api/withdrawals', async (req: Request, res: Response) => {
+app.get('/api/withdrawals', async (req: any, res: any) => {
     if (!dbConnected) return res.json([]);
 
     try {
@@ -1044,7 +1044,7 @@ app.get('/api/withdrawals', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/withdrawals', async (req: Request, res: Response) => {
+app.post('/api/withdrawals', async (req: any, res: any) => {
     const { amount, network, address } = req.body;
     
     if (!dbConnected) {
@@ -1106,7 +1106,7 @@ app.post('/api/withdrawals', async (req: Request, res: Response) => {
 // --- ADMIN ROUTES ---
 
 // Create Signal (Send Push)
-app.post('/api/admin/signals', ensureAdmin, async (req: Request, res: Response) => {
+app.post('/api/admin/signals', ensureAdmin, async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true, signalId: 'mock-id' });
 
     const { pair, type, side, leverage, entry, stopLoss, analysis, targets } = req.body;
@@ -1157,7 +1157,7 @@ app.post('/api/admin/signals', ensureAdmin, async (req: Request, res: Response) 
 });
 
 // Close Signal
-app.put('/api/admin/signals/:id/close', ensureAdmin, async (req: Request, res: Response) => {
+app.put('/api/admin/signals/:id/close', ensureAdmin, async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true });
 
     const { id } = req.params;
@@ -1177,7 +1177,7 @@ app.put('/api/admin/signals/:id/close', ensureAdmin, async (req: Request, res: R
 });
 
 // Delete Signal
-app.delete('/api/admin/signals/:id', ensureAdmin, async (req: Request, res: Response) => {
+app.delete('/api/admin/signals/:id', ensureAdmin, async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true });
 
     const { id } = req.params;
@@ -1191,7 +1191,7 @@ app.delete('/api/admin/signals/:id', ensureAdmin, async (req: Request, res: Resp
 });
 
 // Post Academy Content
-app.post('/api/admin/academy', ensureAdmin, async (req: Request, res: Response) => {
+app.post('/api/admin/academy', ensureAdmin, async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true });
 
     const { title, category, type, duration, author, description, content, videoUrl } = req.body;
@@ -1209,7 +1209,7 @@ app.post('/api/admin/academy', ensureAdmin, async (req: Request, res: Response) 
 });
 
 // Send Notification (Broadcast with Push)
-app.post('/api/admin/notifications', ensureAdmin, async (req: Request, res: Response) => {
+app.post('/api/admin/notifications', ensureAdmin, async (req: any, res: any) => {
     if (!dbConnected) return res.json({ success: true, count: 0 });
 
     const { title, message, type } = req.body;
@@ -1248,7 +1248,7 @@ app.post('/api/admin/notifications', ensureAdmin, async (req: Request, res: Resp
 });
 
 
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (req: any, res: any) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
@@ -1265,7 +1265,7 @@ if (fs.existsSync(distPath)) {
     // Handle React routing, return all requests to React app
     // Use Regex /.*/ to match all routes, avoiding Express 5 string path syntax issues
     // Explicitly define types for req and res to match Express RequestHandler
-    app.get(/.*/, (req: Request, res: Response) => {
+    app.get(/.*/, (req: any, res: any) => {
         // Only serve index.html for non-API routes
         if (!req.path.startsWith('/api')) {
              res.sendFile(path.join(distPath, 'index.html'));

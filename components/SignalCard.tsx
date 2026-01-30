@@ -275,7 +275,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         {/* Header - REFACTORED FOR BETTER LAYOUT */}
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
           {/* Left Side: Pair & Badges */}
-          <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3">
+          <div className="flex flex-col gap-2">
             <h3 className="text-xl font-bold text-white leading-tight tracking-tight">{signal.pair}</h3>
             
             <div className="flex gap-1.5 flex-wrap items-center">
