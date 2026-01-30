@@ -36,7 +36,35 @@ if (!fs.existsSync(uploadsDir)) {
     console.log("Created uploads directory at", uploadsDir);
 }
 
-// Serve uploads statically
+// Serve uploads: Check DB first, then fallback to filesystem
+app.get('/uploads/:filename', async (req: any, res: any) => {
+    const { filename } = req.params;
+
+    try {
+        if (dbConnected) {
+             const result = await query('SELECT data, mime_type FROM file_uploads WHERE filename = $1', [filename]);
+             if (result.rows.length > 0) {
+                 const file = result.rows[0];
+                 res.setHeader('Content-Type', file.mime_type);
+                 res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+                 return res.send(file.data);
+             }
+        }
+        
+        // Fallback to filesystem (legacy support or local dev)
+        const filePath = path.join(uploadsDir, filename);
+        if (fs.existsSync(filePath)) {
+             return res.sendFile(filePath);
+        }
+
+        res.status(404).send('File not found');
+
+    } catch (error) {
+        console.error("Error serving file:", error);
+        res.status(500).send('Server error');
+    }
+});
+
 // Note: We cast static to any to avoid TS issues with Express types in some envs
 app.use('/uploads', express.static(uploadsDir) as any);
 
@@ -454,6 +482,17 @@ const initDb = async () => {
             )
         `);
 
+        // File Uploads Table (For Persistent Storage)
+        await query(`
+            CREATE TABLE IF NOT EXISTS file_uploads (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                filename VARCHAR(255) UNIQUE NOT NULL,
+                data BYTEA NOT NULL,
+                mime_type VARCHAR(100) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+
         console.log("Database schema verified/updated successfully.");
     } catch (error) {
         console.error("Failed to initialize database:", error);
@@ -462,39 +501,34 @@ const initDb = async () => {
 
 // --- API Routes ---
 
-// 1. Upload Handler (Base64 -> File System)
+// 1. Upload Handler (Base64 -> Database)
 app.post('/api/admin/upload', ensureAdmin, async (req: any, res: any) => {
-    // If DB is not connected, use a public placeholder service so UI doesn't break
+    // If DB is not connected, fallback to placeholder
     if (!dbConnected) return res.json({ url: 'https://placehold.co/600x800/10B981/ffffff?text=PnL+Proof' });
 
     const { image, filename } = req.body;
     if (!image) return res.status(400).json({ error: 'No image data' });
 
     try {
-        // Strip metadata if present (data:image/png;base64,...)
         const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         
         if (!matches || matches.length !== 3) {
             return res.status(400).json({ error: 'Invalid base64 string' });
         }
 
+        const mimeType = matches[1];
         const buffer = Buffer.from(matches[2], 'base64');
-        const extension = matches[1].split('/')[1] || 'png';
+        const extension = mimeType.split('/')[1] || 'png';
         const safeName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${extension}`;
-        const filePath = path.join(uploadsDir, safeName);
 
-        fs.writeFile(filePath, buffer, (err) => {
-            if (err) {
-                console.error("Write error:", err);
-                return res.status(500).json({ error: 'Failed to write file' });
-            }
-            
-            // Return URL path (assuming served from root or specific route)
-            // In development, Vite proxy handles /api, but static files need logic.
-            // Since we added app.use('/uploads', ...), the URL is /uploads/filename
-            const fileUrl = `/uploads/${safeName}`;
-            res.json({ url: fileUrl });
-        });
+        // Store in DB for persistence across redeploys
+        await query(
+            'INSERT INTO file_uploads (filename, data, mime_type) VALUES ($1, $2, $3)', 
+            [safeName, buffer, mimeType]
+        );
+
+        const fileUrl = `/uploads/${safeName}`;
+        res.json({ url: fileUrl });
     } catch (e) {
         console.error("Upload error", e);
         res.status(500).json({ error: 'Failed to upload' });
