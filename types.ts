@@ -37,6 +37,7 @@ export interface Signal {
   stopLoss: string;
   tpTargets: { price: string; hit: boolean }[];
   slUnlock?: boolean;
+  isEntryHit?: boolean; // New field to track if price reached entry
   analysis?: string;
   riskManagement?: string;
 }

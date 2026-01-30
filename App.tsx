@@ -68,6 +68,7 @@ const MOCK_SIGNALS: Signal[] = [
             { price: '100000', hit: false }
         ],
         slUnlock: true,
+        isEntryHit: true,
         analysis: 'Bullish consolidation above key support. Looking for a breakout.',
         riskManagement: '1-2% risk. Tight SL.'
     },
@@ -85,7 +86,8 @@ const MOCK_SIGNALS: Signal[] = [
             { price: '3550', hit: true },
             { price: '3700', hit: false }
         ],
-        slUnlock: true
+        slUnlock: true,
+        isEntryHit: true
     },
     {
         id: '3',
@@ -102,6 +104,7 @@ const MOCK_SIGNALS: Signal[] = [
             { price: '180.00', hit: false }
         ],
         slUnlock: true,
+        isEntryHit: true,
         analysis: 'Bearish divergence on 4H RSI. Rejection from supply zone.',
         riskManagement: 'High volatility, use reduced position size.'
     },
@@ -120,7 +123,8 @@ const MOCK_SIGNALS: Signal[] = [
             { price: '2.20', hit: true },
             { price: '2.30', hit: true }
         ],
-        slUnlock: true
+        slUnlock: true,
+        isEntryHit: true
     }
 ];
 

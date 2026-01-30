@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Lock, Unlock, Lightbulb, X, ShieldCheck, BrainCircuit, Crown, Check, Zap, Copy, Share2, Download, QrCode, TrendingUp, TrendingDown, AlertTriangle, Clock } from 'lucide-react';
 import { Signal } from '../types';
 
 interface SignalCardProps {
@@ -18,6 +18,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'neutral'>('neutral');
 
   const isLocked = signal.entry === 'Locked' || !signal.slUnlock;
+  
+  // Determine if Entry is Pending (DB flag has priority, fallback to visual logic if needed)
+  // Logic: If active AND isEntryHit is specifically false (undefined means legacy/mock so assume hit)
+  const isEntryPending = signal.status === 'active' && signal.isEntryHit === false;
 
   // --- Automatic Calculation Logic ---
   
@@ -49,11 +53,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
       // Default to database values (Back-end calculated PnL)
       let currentPnl = signal.pnl;
       let currentTpTargets = signal.tpTargets;
-      let currentStatus = signal.status;
+      // Explicitly type as string to allow 'SL Hit', 'pending' etc. alongside 'active' | 'closed'
+      let currentStatus: string = signal.status;
       let slHit = false;
       let tpSecured = false;
 
       // Only override if we have a live price, trade is active/open, and data isn't locked
+      // AND Entry has been hit (otherwise PnL is 0)
       if (livePrice && !isLocked && signal.status === 'active') {
           const entryPrice = parsePrice(signal.entry);
           const stopLossPrice = parsePrice(signal.stopLoss);
@@ -66,7 +72,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                   const tpPrice = parsePrice(tp.price);
                   let isHit = tp.hit; // Start with DB state
                   
-                  if (!isNaN(tpPrice)) {
+                  if (!isNaN(tpPrice) && !isEntryPending) {
                        if (signal.side === 'Long' && livePrice >= tpPrice) isHit = true;
                        if (signal.side === 'Short' && livePrice <= tpPrice) isHit = true;
                   }
@@ -85,7 +91,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
 
               // 2. Check Stop Loss
               let liveSlHit = false;
-              if (!isNaN(stopLossPrice)) {
+              if (!isNaN(stopLossPrice) && !isEntryPending) {
                   if (signal.side === 'Long' && livePrice <= stopLossPrice) liveSlHit = true;
                   if (signal.side === 'Short' && livePrice >= stopLossPrice) liveSlHit = true;
               }
@@ -98,7 +104,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                   const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
                   currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
               } else if (liveSlHit) {
-                  // SL is physically hit
+                  // SL is physically hit (Frontend Simulation)
+                  // Note: Backend handles the official close and final PnL. This is for visual reactivity.
                   if (isAnyTpHit) {
                       // Logic: Hit TP1/2/3 then went to SL -> Close as Profitable at highest TP hit
                       currentStatus = 'closed';
@@ -114,6 +121,9 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                       currentStatus = 'SL Hit';
                       currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side, leverage);
                   }
+              } else if (isEntryPending) {
+                  currentStatus = 'pending';
+                  currentPnl = 0;
               } else {
                   // Trade Active - Floating PnL
                   currentStatus = 'active';
@@ -129,7 +139,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           isSlHit: slHit,
           isTpSecured: tpSecured
       };
-  }, [signal, livePrice, isLocked]);
+  }, [signal, livePrice, isLocked, isEntryPending]);
 
   const isClosed = displayStatus === 'closed' || displayStatus === 'SL Hit';
 
@@ -227,6 +237,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
 
   const pnlColorClass = displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400';
   const statusColorClass = 
+    isEntryPending ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
     displayStatus === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/10' :
     displayStatus === 'SL Hit' ? 'bg-red-500/10 text-red-400 border-red-500/10' :
     'bg-gray-700/50 text-gray-400 border-gray-600/30';
@@ -238,8 +249,11 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         className={`bg-dark-800 rounded-2xl p-4 border border-dark-700/50 shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col ${isClosed ? 'cursor-pointer hover:bg-dark-700 hover:border-dark-600 hover:shadow-emerald-900/10 hover:shadow-xl' : ''}`}
       >
         {/* Background glow for active signals */}
-        {displayStatus === 'active' && (
+        {displayStatus === 'active' && !isEntryPending && (
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        )}
+        {isEntryPending && (
+             <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         )}
         {isSlHit && (
             <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
@@ -276,16 +290,21 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
                 )}
                 
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${statusColorClass}`}>
-                    {displayStatus}
+                    {isEntryPending ? 'Pending' : displayStatus}
                 </span>
             </div>
           </div>
           
           {/* Right Side: PnL & Price */}
           <div className="flex flex-col items-end shrink-0">
-             <span className={`text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
-                {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
-             </span>
+             {isEntryPending ? (
+                 <span className="text-xl font-bold tracking-tight text-gray-400">Waiting</span>
+             ) : (
+                 <span className={`text-2xl font-bold tracking-tight transition-colors duration-300 ${pnlColorClass}`}>
+                    {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
+                 </span>
+             )}
+             
              {livePrice && (
                  <div className={`flex items-center gap-1.5 text-xs font-mono font-medium transition-colors duration-300 mt-0.5 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
                      {/* Blinking Dot for Live Status */}
@@ -305,7 +324,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         {/* Time & Analysis Row */}
         <div className="flex justify-between items-center mb-4 relative z-10">
             <div className="flex items-center gap-1.5 text-gray-400">
-                <div className={`w-1.5 h-1.5 rounded-full ${displayStatus === 'active' ? 'bg-emerald-500 animate-pulse' : displayStatus === 'SL Hit' ? 'bg-red-500' : 'bg-gray-600'}`}></div>
+                <div className={`w-1.5 h-1.5 rounded-full ${displayStatus === 'active' && !isEntryPending ? 'bg-emerald-500 animate-pulse' : displayStatus === 'SL Hit' ? 'bg-red-500' : isEntryPending ? 'bg-yellow-500' : 'bg-gray-600'}`}></div>
                 <p className="text-xs font-medium">{signal.timeAgo}</p>
             </div>
             
@@ -327,9 +346,9 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
           {/* Entry Box */}
           <div 
             onClick={signal.entry === 'Locked' ? handleUnlockClick : undefined}
-            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border border-dark-700/30 transition-colors duration-300 ${signal.entry === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
+            className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${isEntryPending ? 'border-yellow-500/30' : 'border-dark-700/30'} ${signal.entry === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
           >
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-0.5">Entry Zone</span>
+            <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${isEntryPending ? 'text-yellow-500' : 'text-gray-500'}`}>Entry Zone</span>
             {signal.entry === 'Locked' ? (
                <div className="flex items-center gap-1.5">
                    <Lock className="w-3.5 h-3.5 text-gray-500 group-hover:text-emerald-400 transition-colors" />
@@ -397,6 +416,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice }) => {
         )}
         
         {/* Alerts / Status Messages */}
+        {isEntryPending && (
+            <div className="mt-3 bg-yellow-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-yellow-500/20 relative z-10">
+                <Clock size={12} className="text-yellow-500" />
+                <span className="text-[10px] font-medium text-yellow-400">Waiting for Entry Price</span>
+            </div>
+        )}
+
         {isSlHit && (
              <div className="mt-3 bg-red-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-red-500/20 relative z-10 animate-pulse">
                 <AlertTriangle size={12} className="text-red-500" />
