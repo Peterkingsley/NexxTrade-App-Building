@@ -8,6 +8,41 @@ interface SignalCardProps {
   onUpgrade?: () => void;
 }
 
+// 3D Bar Graphic for PnL Card
+const PnLGraphic = () => (
+  <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-2xl">
+    {/* Bar 1 - Small */}
+    <path d="M20 90 L35 85 L35 60 L20 65 Z" fill="#2c303b" />
+    <path d="M20 65 L35 60 L50 60 L35 65 Z" fill="#3e4552" />
+    <path d="M35 60 L50 60 L50 85 L35 85 Z" fill="#586375" />
+
+    {/* Bar 2 - Medium */}
+    <path d="M45 90 L60 85 L60 45 L45 50 Z" fill="#2c303b" />
+    <path d="M45 50 L60 45 L75 45 L60 50 Z" fill="#4b5563" />
+    <path d="M60 45 L75 45 L75 85 L60 85 Z" fill="#9ca3af" />
+
+    {/* Bar 3 - Tall (Hero) */}
+    <path d="M70 90 L85 85 L85 20 L70 25 Z" fill="#2c303b" />
+    <path d="M70 25 L85 20 L100 20 L85 25 Z" fill="#94a3b8" />
+    <path d="M85 20 L100 20 L100 85 L85 85 Z" fill="#e2e8f0" /> {/* Bright face */}
+
+    {/* Bar 4 - Medium */}
+    <path d="M95 90 L110 85 L110 50 L95 55 Z" fill="#2c303b" />
+    <path d="M95 55 L110 50 L125 50 L110 55 Z" fill="#3e4552" />
+    <path d="M110 50 L125 50 L125 85 L110 85 Z" fill="#64748b" />
+
+    {/* Trend Line */}
+    <path d="M10 100 C 40 90, 60 40, 120 30" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
+    <defs>
+        <linearGradient id="paint0_linear" x1="60" y1="20" x2="60" y2="100" gradientUnits="userSpaceOnUse">
+            <stop stopColor="white" stopOpacity="0.1"/>
+            <stop offset="1" stopColor="white" stopOpacity="0"/>
+        </linearGradient>
+    </defs>
+    <rect x="10" y="100" width="110" height="20" fill="url(#paint0_linear)" transform="skewX(-20)" opacity="0.2" />
+  </svg>
+);
+
 const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade }) => {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -21,7 +56,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
   const isLocked = signal.entry === 'Locked' || !signal.slUnlock;
   
   // Determine if Entry is Pending (DB flag has priority, fallback to visual logic if needed)
-  // Logic: If active AND isEntryHit is specifically false (undefined means legacy/mock so assume hit)
   const isEntryPending = signal.status === 'active' && signal.isEntryHit === false;
 
   // --- Automatic Calculation Logic ---
@@ -29,12 +63,10 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
   const parsePrice = (priceStr: string) => {
       if (!priceStr || priceStr === 'Locked') return NaN;
       // Robust Regex Number Extraction: matches 123, 123.45, 1,234.56
-      // Handles ranges like "2000-2050" by taking the first number
       const match = priceStr.replace(/,/g, '').match(/[+-]?([0-9]*[.])?[0-9]+/);
       return match ? parseFloat(match[0]) : NaN;
   };
 
-  // Helper to extract all numbers from a string (for ranges)
   const parsePriceRange = (priceStr: string) => {
       if (!priceStr || priceStr === 'Locked') return [];
       const cleanStr = priceStr.replace(/,/g, '');
@@ -42,7 +74,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
       return matches ? matches.map(parseFloat) : [];
   };
 
-  // Helper to extract numeric leverage (e.g., "Cross 20x" -> 20)
   const getLeverage = (leverageStr?: string, type?: string) => {
       if (type === 'Spot' || !leverageStr) return 1;
       const match = leverageStr.match(/(\d+)/);
@@ -60,46 +91,32 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
   };
 
   const { displayPnl, displayTpTargets, displayStatus, isSlHit, isTpSecured } = useMemo(() => {
-      // Default to database values (Back-end calculated PnL)
       let currentPnl = signal.pnl;
       let currentTpTargets = signal.tpTargets;
-      // Explicitly type as string to allow 'SL Hit', 'pending' etc. alongside 'active' | 'closed'
       let currentStatus: string = signal.status;
       let slHit = false;
       let tpSecured = false;
 
-      // Only override if we have a live price, trade is active/open, and data isn't locked
       if (livePrice && !isLocked && signal.status === 'active') {
-          // Parse Entry Range
           const entryParts = parsePriceRange(signal.entry);
           const entryMax = Math.max(...entryParts);
           const entryMin = Math.min(...entryParts);
-          
-          // Use the first number as the PnL anchor (consistent with backend)
           const entryPrice = entryParts.length > 0 ? entryParts[0] : NaN;
-          
           const stopLossPrice = parsePrice(signal.stopLoss);
           const leverage = getLeverage(signal.leverage, signal.type);
 
           if (!isNaN(entryPrice)) {
-              // 0. Determine Local Active State
-              // If DB says pending, check if condition is NOW met to visually update card
-              let isLiveEntryHit = !isEntryPending; // Default to DB state
+              let isLiveEntryHit = !isEntryPending;
               
               if (isEntryPending) {
-                   // Long: Active if Price <= Max Entry
                    if (signal.side === 'Long' && livePrice <= entryMax) isLiveEntryHit = true;
-                   // Short: Active if Price >= Min Entry
                    if (signal.side === 'Short' && livePrice >= entryMin) isLiveEntryHit = true;
               }
 
               if (isLiveEntryHit) {
-                  // 1. Calculate Derived TP Hits (DB + Live)
-                  // We need to know which TPs are hit. We trust DB for past hits, and Live for current hits.
                   currentTpTargets = signal.tpTargets.map(tp => {
                       const tpPrice = parsePrice(tp.price);
-                      let isHit = tp.hit; // Start with DB state
-                      
+                      let isHit = tp.hit;
                       if (!isNaN(tpPrice)) {
                            if (signal.side === 'Long' && livePrice >= tpPrice) isHit = true;
                            if (signal.side === 'Short' && livePrice <= tpPrice) isHit = true;
@@ -107,55 +124,42 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
                       return { ...tp, hit: isHit, priceValue: tpPrice };
                   });
 
-                  // Check if All TPs are hit
                   const areAllTpHit = currentTpTargets.length > 0 && currentTpTargets.every(tp => tp.hit);
                   
-                  // Find highest TP hit index
                   let maxTpHitIndex = -1;
                   currentTpTargets.forEach((tp, idx) => {
                       if (tp.hit) maxTpHitIndex = idx;
                   });
                   const isAnyTpHit = maxTpHitIndex !== -1;
 
-                  // 2. Check Stop Loss
                   let liveSlHit = false;
                   if (!isNaN(stopLossPrice)) {
                       if (signal.side === 'Long' && livePrice <= stopLossPrice) liveSlHit = true;
                       if (signal.side === 'Short' && livePrice >= stopLossPrice) liveSlHit = true;
                   }
 
-                  // 3. Determine Final Status and PnL
                   if (areAllTpHit) {
                       currentStatus = 'closed';
                       const finalTp = currentTpTargets[currentTpTargets.length - 1];
-                      // If all TPs hit, ROI is the last TP
                       const priceToUse = !isNaN(parsePrice(finalTp.price)) ? parsePrice(finalTp.price) : livePrice;
                       currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
                   } else if (liveSlHit) {
-                      // SL is physically hit (Frontend Simulation)
-                      // Note: Backend handles the official close and final PnL. This is for visual reactivity.
                       if (isAnyTpHit) {
-                          // Logic: Hit TP1/2/3 then went to SL -> Close as Profitable at highest TP hit
                           currentStatus = 'closed';
                           tpSecured = true;
-                          
-                          // Calculate PnL based on highest TP Hit (Secured Profit)
                           const maxTp = currentTpTargets[maxTpHitIndex];
                           const priceToUse = !isNaN(parsePrice(maxTp.price)) ? parsePrice(maxTp.price) : entryPrice;
                           currentPnl = calculatePnl(entryPrice, priceToUse, signal.side, leverage);
                       } else {
-                          // Pure Loss (No TP hit)
                           slHit = true;
                           currentStatus = 'SL Hit';
                           currentPnl = calculatePnl(entryPrice, stopLossPrice, signal.side, leverage);
                       }
                   } else {
-                      // Trade Active - Floating PnL
                       currentStatus = 'active';
                       currentPnl = calculatePnl(entryPrice, livePrice, signal.side, leverage);
                   }
               } else {
-                  // Still Pending
                   currentStatus = 'pending';
                   currentPnl = 0;
               }
@@ -173,25 +177,17 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
 
   const isClosed = displayStatus === 'closed' || displayStatus === 'SL Hit';
 
-  // Handle price flash effect
   useEffect(() => {
       if (!livePrice) return;
-      
       if (prevPrice !== undefined) {
-          if (livePrice > prevPrice) {
-              setPriceDirection('up');
-          } else if (livePrice < prevPrice) {
-              setPriceDirection('down');
-          }
+          if (livePrice > prevPrice) setPriceDirection('up');
+          else if (livePrice < prevPrice) setPriceDirection('down');
       }
-      
       const timer = setTimeout(() => setPriceDirection('neutral'), 1000);
       setPrevPrice(livePrice);
-      
       return () => clearTimeout(timer);
   }, [livePrice]);
 
-  // Price formatting helper
   const formatPrice = (price: number) => {
       if (price < 1) return price.toFixed(4);
       if (price < 1000) return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -200,11 +196,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
 
   const handleAnalysisClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isLocked) {
-        setShowUpgradeModal(true);
-    } else {
-        setShowAnalysis(true);
-    }
+    if (isLocked) setShowUpgradeModal(true);
+    else setShowAnalysis(true);
   };
 
   const handleUnlockClick = (e?: React.MouseEvent) => {
@@ -213,9 +206,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
   };
 
   const handleCardClick = () => {
-      if (isClosed) {
-          setShowShareModal(true);
-      }
+      // Allow sharing even if not strictly closed, for showing current PnL
+      setShowShareModal(true);
   };
 
   const handleCopy = (e: React.MouseEvent, text: string, id: string) => {
@@ -226,7 +218,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
   };
 
   const handleDownload = () => {
-      // Simulation of downloading the card
       const link = document.createElement('a');
       link.download = `NexxTrade_${signal.pair}_PnL.png`;
       link.href = '#'; 
@@ -246,7 +237,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
               console.log('Error sharing:', error);
           }
       } else {
-          // Fallback
           alert("Share dialog opened");
       }
   };
@@ -272,19 +262,12 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
     displayStatus === 'SL Hit' ? 'bg-red-500/10 text-red-400 border-red-500/10' :
     'bg-gray-700/50 text-gray-400 border-gray-600/30';
 
-  const tierBadgeColor = 
-    signal.requiresSubscription === 'basic' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-    signal.requiresSubscription === 'pro' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
-    signal.requiresSubscription === 'elite' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' : 
-    '';
-
   return (
     <>
       <div 
         onClick={handleCardClick}
-        className={`bg-dark-800 rounded-2xl p-4 border border-dark-700/50 shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col ${isClosed ? 'cursor-pointer hover:bg-dark-700 hover:border-dark-600 hover:shadow-emerald-900/10 hover:shadow-xl' : ''}`}
+        className={`bg-dark-800 rounded-2xl p-4 border border-dark-700/50 shadow-lg transition-all duration-300 relative overflow-hidden group flex flex-col cursor-pointer hover:bg-dark-700 hover:border-dark-600 hover:shadow-xl`}
       >
-        {/* Background glow for active signals */}
         {displayStatus === 'active' && (
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
         )}
@@ -308,14 +291,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
             </div>
         )}
 
-        {/* Header - REFACTORED FOR BETTER LAYOUT */}
+        {/* Header */}
         <div className="flex justify-between items-start mb-3 relative z-10 gap-2">
-          {/* Left Side: Pair & Badges */}
           <div className="flex flex-col gap-2">
             <h3 className="text-xl font-bold text-white leading-tight tracking-tight flex items-center gap-2">
                 {signal.pair}
                 {signal.requiresSubscription && signal.requiresSubscription !== 'free' && (
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide flex items-center gap-1 ${tierBadgeColor}`}>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide flex items-center gap-1 bg-yellow-500/10 text-yellow-500 border-yellow-500/20`}>
                         <Crown size={10} strokeWidth={3} /> {signal.requiresSubscription}
                     </span>
                 )}
@@ -338,7 +320,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
             </div>
           </div>
           
-          {/* Right Side: PnL & Price */}
           <div className="flex flex-col items-end shrink-0">
              {displayStatus === 'pending' ? (
                  <span className="text-xl font-bold tracking-tight text-gray-400">Waiting</span>
@@ -350,15 +331,11 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
              
              {livePrice && (
                  <div className={`flex items-center gap-1.5 text-xs font-mono font-medium transition-colors duration-300 mt-0.5 ${priceDirection === 'up' ? 'text-emerald-400' : priceDirection === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
-                     {/* Blinking Dot for Live Status */}
                      <span className="relative flex h-1.5 w-1.5">
                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${priceDirection === 'up' ? 'bg-emerald-400' : priceDirection === 'down' ? 'bg-red-400' : 'bg-gray-400'}`}></span>
                        <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${priceDirection === 'up' ? 'bg-emerald-500' : priceDirection === 'down' ? 'bg-red-500' : 'bg-gray-500'}`}></span>
                      </span>
-                     
                      {formatPrice(livePrice)}
-                     {priceDirection === 'up' && <TrendingUp size={10} />}
-                     {priceDirection === 'down' && <TrendingDown size={10} />}
                  </div>
              )}
           </div>
@@ -386,7 +363,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
 
         {/* Stats Grid - Entry & SL */}
         <div className="grid grid-cols-2 gap-3 mb-4 relative z-10">
-          {/* Entry Box */}
           <div 
             onClick={signal.entry === 'Locked' ? handleUnlockClick : undefined}
             className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${displayStatus === 'pending' ? 'border-yellow-500/30' : 'border-dark-700/30'} ${signal.entry === 'Locked' ? 'cursor-pointer hover:bg-dark-700 group' : ''}`}
@@ -405,7 +381,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
             )}
           </div>
 
-          {/* Stop Loss Box */}
           <div 
             onClick={!signal.slUnlock || signal.stopLoss === 'Locked' ? handleUnlockClick : undefined}
             className={`bg-dark-900/60 rounded-xl p-2.5 flex flex-col items-center justify-center border transition-colors duration-300 ${
@@ -427,63 +402,11 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
           </div>
         </div>
 
-        {/* Take Profit Targets */}
-        {displayTpTargets.length > 0 && (
-          <div className="space-y-2 relative z-10 flex-1">
-            <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">
-              <Zap size={10} className="text-yellow-500" fill="currentColor" />
-              <span>Take Profit Targets</span>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-2">
-              {displayTpTargets.map((tp, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={tp.price === 'Locked' ? handleUnlockClick : undefined}
-                  className={`py-2 px-1 rounded-lg text-xs font-medium text-center flex flex-col items-center justify-center gap-0.5 transition-all border ${
-                      tp.hit 
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)]' 
-                      : 'bg-dark-900/40 text-gray-400 border-dark-700/50'
-                  } ${tp.price === 'Locked' ? 'cursor-pointer hover:bg-dark-600 hover:border-emerald-500/30 group' : ''}`}
-                >
-                  <span className={`text-[9px] uppercase font-bold ${tp.hit ? 'text-emerald-500' : 'text-gray-600'}`}>TP {idx + 1}</span>
-                  {tp.price === 'Locked' ? (
-                      <Lock size={12} className="text-gray-500 group-hover:text-emerald-400 mt-0.5" />
-                  ) : (
-                      <span className="font-mono">{tp.price}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
         {/* Alerts / Status Messages */}
         {displayStatus === 'pending' && (
-            <div className="mt-3 bg-yellow-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-yellow-500/20 relative z-10">
+            <div className="mt-auto bg-yellow-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-yellow-500/20 relative z-10">
                 <Clock size={12} className="text-yellow-500" />
                 <span className="text-[10px] font-medium text-yellow-400">Waiting for Entry Price</span>
-            </div>
-        )}
-
-        {isSlHit && (
-             <div className="mt-3 bg-red-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-red-500/20 relative z-10 animate-pulse">
-                <AlertTriangle size={12} className="text-red-500" />
-                <span className="text-[10px] font-medium text-red-400">Stop Loss Hit</span>
-            </div>
-        )}
-
-        {isTpSecured && (
-             <div className="mt-3 bg-emerald-500/10 p-2 rounded-lg flex items-center justify-center gap-2 border border-emerald-500/20 relative z-10">
-                <Check size={12} className="text-emerald-500" />
-                <span className="text-[10px] font-medium text-emerald-400">Trade Closed • Profit Secured</span>
-            </div>
-        )}
-
-        {!isSlHit && !isTpSecured && displayTpTargets.length > 0 && displayTpTargets[0].hit && !isClosed && (
-            <div className="mt-3 bg-emerald-500/5 p-2 rounded-lg flex items-center justify-center gap-2 border border-emerald-500/10 relative z-10">
-                <Check size={12} className="text-emerald-500" />
-                <span className="text-[10px] font-medium text-emerald-400/80">TP Hit • Secure Profits</span>
             </div>
         )}
       </div>
@@ -493,53 +416,20 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowAnalysis(false)}></div>
             <div className="bg-dark-800 w-full max-w-sm rounded-3xl overflow-hidden border border-dark-700 shadow-2xl relative animate-in zoom-in-95 duration-200">
-                {/* Modal Header */}
                 <div className="bg-gradient-to-r from-emerald-900/40 to-dark-800 p-5 border-b border-dark-700 flex justify-between items-start">
                     <div>
                         <h3 className="text-white text-lg font-bold flex items-center gap-2">
                             <BrainCircuit className="text-emerald-400" size={20} />
                             Trade Logic
                         </h3>
-                        <p className="text-gray-400 text-xs mt-1">Why we took this {signal.pair} trade</p>
                     </div>
-                    <button 
-                        onClick={() => setShowAnalysis(false)}
-                        className="p-1 bg-dark-700 rounded-full text-gray-400 hover:text-white transition"
-                    >
-                        <X size={18} />
-                    </button>
+                    <button onClick={() => setShowAnalysis(false)} className="p-1 bg-dark-700 rounded-full text-gray-400 hover:text-white transition"><X size={18} /></button>
                 </div>
-
-                {/* Modal Body */}
                 <div className="p-5 space-y-6 max-h-[60vh] overflow-y-auto">
-                    {/* Analysis Section */}
                     <div>
                         <h4 className="text-emerald-400 text-sm font-bold uppercase tracking-wider mb-2">Technical Analysis</h4>
-                        <p className="text-gray-300 text-sm leading-relaxed">
-                            {signal.analysis || "Market structure break on the 4H timeframe combined with a retest of the order block. RSI divergence indicates bullish momentum build-up."}
-                        </p>
+                        <p className="text-gray-300 text-sm leading-relaxed">{signal.analysis || "Market structure break..."}</p>
                     </div>
-
-                    {/* Risk Management Section */}
-                    <div className="bg-dark-900/50 rounded-xl p-4 border border-dark-700">
-                        <h4 className="text-white text-sm font-bold flex items-center gap-2 mb-2">
-                            <ShieldCheck className="text-emerald-400" size={16} />
-                            Safety & Risk Plan
-                        </h4>
-                         <p className="text-gray-400 text-xs leading-relaxed">
-                            {signal.riskManagement || "Use 1-2% risk per trade. Move Stop Loss to breakeven after TP1 is hit to secure profits. Do not overleverage."}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Modal Footer */}
-                <div className="p-4 border-t border-dark-700 bg-dark-900/50">
-                    <button 
-                        onClick={() => setShowAnalysis(false)}
-                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors"
-                    >
-                        Understood
-                    </button>
                 </div>
             </div>
         </div>
@@ -555,138 +445,92 @@ const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade })
                         <Crown size={32} className="text-yellow-500" fill="currentColor" />
                     </div>
                     <h3 className="text-2xl font-bold text-white mb-2">Premium Signal</h3>
-                    <p className="text-gray-400 text-sm mb-6">
-                        This specific trade requires a <strong>{signal.requiresSubscription?.toUpperCase() || 'PRO'}</strong> membership to view the Entry, Stop Loss, and Targets.
-                    </p>
-                    
-                    <div className="space-y-3">
-                        <button 
-                            onClick={onUpgrade}
-                            className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-dark-900 font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
-                        >
-                            <Zap size={18} fill="currentColor" />
-                            Unlock Now
-                        </button>
-                        <button 
-                            onClick={() => setShowUpgradeModal(false)}
-                            className="w-full py-3 text-gray-500 font-medium hover:text-white transition-colors"
-                        >
-                            Maybe Later
-                        </button>
-                    </div>
+                    <p className="text-gray-400 text-sm mb-6">Upgrade to unlock this trade.</p>
+                    <button onClick={onUpgrade} className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-dark-900 font-bold py-3.5 rounded-xl shadow-lg">Unlock Now</button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* Share PnL Card Modal */}
+      {/* Share PnL Card Modal - Updated to MEXC Style */}
       {showShareModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center px-4">
              <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowShareModal(false)}></div>
              <div className="w-full max-w-sm relative animate-in zoom-in-95 duration-200">
-                <button 
-                    onClick={() => setShowShareModal(false)}
-                    className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white bg-white/10 rounded-full backdrop-blur-sm"
-                >
+                <button onClick={() => setShowShareModal(false)} className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white bg-white/10 rounded-full backdrop-blur-sm">
                     <X size={24} />
                 </button>
 
                 {/* The Trade Card Node */}
-                <div id="trade-card" className={`relative overflow-hidden rounded-3xl p-6 ${displayPnl >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-800' : 'bg-gradient-to-br from-red-600 to-red-800'} shadow-2xl border border-white/10`}>
-                    {/* Background Pattern */}
-                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/40 to-transparent"></div>
-                    <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-black/20 rounded-full blur-3xl"></div>
-                    
-                    {/* Grid Pattern Overlay */}
-                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+                <div id="trade-card" className="bg-[#0b0e14] text-white p-6 rounded-[24px] relative overflow-hidden font-sans border border-[#1e2329] shadow-2xl w-full aspect-[4/5] flex flex-col select-none">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-8 relative z-20">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-6 h-6 bg-[#2962FF] rounded-full flex items-center justify-center shadow-lg">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M4.5 12.5L10 7H15.5L12.5 10H10.5V12L7.5 15H2L4.5 12.5Z" /><path d="M19.5 11.5L14 17H8.5L11.5 14H13.5V12L16.5 9H22L19.5 11.5Z" /></svg>
+                                </div>
+                                <span className="font-bold text-lg tracking-tight text-white">NexxTrade</span>
+                            </div>
+                            <p className="text-gray-500 text-[10px] font-medium ml-0.5">Shared on {new Date().toISOString().slice(0, 19).replace('T', ' ')}</p>
+                        </div>
+                        <div className="bg-[#1E2329] px-3 py-1 rounded-full border border-gray-800">
+                            <span className="text-gray-300 text-[10px] font-bold tracking-wide">NexxTrade</span>
+                        </div>
+                    </div>
 
-                    {/* Content */}
-                    <div className="relative z-10 flex flex-col h-full min-h-[420px] justify-between text-white">
+                    {/* Main Content */}
+                    <div className="flex-1 relative z-20">
+                        <h2 className="text-xl font-bold mb-2 text-white">{signal.pair} {signal.type === 'Futures' ? 'Perpetual' : ''}</h2>
                         
-                        {/* Header */}
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-emerald-700 shadow-lg">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M4.5 12.5L10 7H15.5L12.5 10H10.5V12L7.5 15H2L4.5 12.5Z" />
-                                        <path d="M19.5 11.5L14 17H8.5L11.5 14H13.5V12L16.5 9H22L19.5 11.5Z" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <span className="font-bold text-lg leading-none block">NexxTrade</span>
-                                    <span className="text-[10px] opacity-80 uppercase tracking-widest font-medium">Premium Signals</span>
-                                </div>
-                            </div>
-                            <div className="bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-bold uppercase border border-white/10">
-                                {signal.type} {signal.leverage ? `• ${signal.leverage}` : ''}
-                            </div>
+                        <div className="flex items-center gap-2 mb-6">
+                            <span className={`text-base font-bold ${signal.side === 'Long' ? 'text-[#00C076]' : 'text-[#F6465D]'}`}>
+                                {signal.side}
+                            </span>
+                            <span className="text-gray-600 font-light">|</span>
+                            <span className="text-base font-bold text-gray-300">
+                                {signal.leverage || '20X'}
+                            </span>
                         </div>
 
-                        {/* Main PnL */}
-                        <div className="my-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <h1 className="text-3xl font-bold">{signal.pair}</h1>
-                                <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${signal.side === 'Long' ? 'bg-emerald-900/40 text-emerald-100' : 'bg-red-900/40 text-red-100'} border border-white/10`}>
-                                    {signal.side}
-                                </span>
-                            </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-6xl font-black tracking-tighter drop-shadow-lg">
-                                    {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
-                                </span>
-                            </div>
-                            <p className="opacity-90 font-medium text-lg mt-1">Return on Investment</p>
+                        <div className={`text-5xl font-bold tracking-tighter mb-10 ${displayPnl >= 0 ? 'text-[#00C076]' : 'text-[#F6465D]'}`}>
+                            {displayPnl > 0 ? '+' : ''}{displayPnl.toFixed(2)}%
                         </div>
 
-                        {/* Details Grid */}
-                        <div className="grid grid-cols-2 gap-y-4 gap-x-8 mb-6 bg-black/10 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
-                            <div>
-                                <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider mb-0.5">Entry Price</p>
-                                <p className="font-mono font-bold text-lg">{signal.entry}</p>
+                        <div className="space-y-3">
+                            <div className="flex justify-between w-40">
+                                <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wide">Entry Price</span>
+                                <span className="text-white text-sm font-bold font-mono">{signal.entry}</span>
                             </div>
-                            <div>
-                                <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider mb-0.5">Last Price</p>
-                                <p className="font-mono font-bold text-lg">
-                                    {livePrice ? formatPrice(livePrice) : "---"}
-                                </p>
-                            </div>
-                             <div className="col-span-2 border-t border-white/10 pt-3 flex justify-between items-center">
-                                <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider">Date</p>
-                                <p className="font-medium text-sm text-white/90">{new Date().toLocaleDateString()}</p>
+                            <div className="flex justify-between w-40">
+                                <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wide">Fair Price</span>
+                                <span className="text-white text-sm font-bold font-mono">{livePrice ? formatPrice(livePrice) : "---"}</span>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Footer */}
-                        <div className="mt-auto flex justify-between items-end gap-4">
-                            <div className="flex-1">
-                                <p className="text-[10px] opacity-70 mb-1.5 uppercase tracking-wider font-bold">Referral Code</p>
-                                <p className="font-bold text-xl tracking-wide">NEXX-ELITE</p>
-                                <p className="text-[10px] mt-1 opacity-60">Join the winning team at nexxtrade.com</p>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl shadow-lg shrink-0">
-                                <QrCode className="text-black" size={48} />
-                            </div>
+                    {/* Graphic - Positioned Right */}
+                    <div className="absolute right-[-20px] top-[140px] pointer-events-none z-10 opacity-90 scale-110">
+                        <PnLGraphic />
+                    </div>
+
+                    {/* Footer */}
+                    <div className="mt-auto flex justify-between items-end pt-6 relative z-20">
+                        <div>
+                            <p className="text-gray-500 text-[10px] font-bold uppercase mb-1">Referral Code</p>
+                            <p className="text-white text-xl font-bold mb-2">1agLp</p>
+                            <p className="text-gray-500 text-[10px] font-medium">Sign up to receive $20 and enjoy 0-fee trading!</p>
+                        </div>
+                        <div className="bg-white p-1.5 rounded-lg">
+                            <QrCode size={42} className="text-black" />
                         </div>
                     </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex gap-3 mt-6">
-                    <button 
-                        onClick={handleDownload}
-                        className="flex-1 bg-white hover:bg-gray-100 text-dark-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg"
-                    >
-                        <Download size={20} />
-                        Save Image
-                    </button>
-                     <button 
-                        onClick={handleShare}
-                        className="flex-1 bg-dark-800 hover:bg-dark-700 text-white font-bold py-3.5 rounded-xl border border-dark-700 flex items-center justify-center gap-2 transition shadow-lg"
-                    >
-                        <Share2 size={20} />
-                        Share
-                    </button>
+                    <button onClick={handleDownload} className="flex-1 bg-white hover:bg-gray-100 text-dark-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg"><Download size={20} /> Save Image</button>
+                     <button onClick={handleShare} className="flex-1 bg-dark-800 hover:bg-dark-700 text-white font-bold py-3.5 rounded-xl border border-dark-700 flex items-center justify-center gap-2 transition shadow-lg"><Share2 size={20} /> Share</button>
                 </div>
              </div>
         </div>
