@@ -5,18 +5,23 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist', 
   server: {
-    // 1. This is the page the app opens first
+    // This is your main entry point
     url: 'https://www.app.nexxtrade.io', 
     
-    // 2. This PREVENTS the app from opening the browser
+    // These are the "Safe" zones that stay inside the app
     allowNavigation: [
       'app.nexxtrade.io',
-      '*.app.nexxtrade.io' // This covers sub-pages too
-      'accounts.google.com',           // Allow Google Login
-      'oauth2.googleapis.com',         // Google API
-      't.me',                          // Telegram link
+      'www.app.nexxtrade.io',
+      '*.app.nexxtrade.io',
+      'accounts.google.com',
+      'oauth2.googleapis.com',
+      't.me',
       'oauth.telegram.org'
     ]
+  },
+  // This tricks Google into letting you log in inside the app
+  android: {
+    overrideUserAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36'
   }
 };
 
