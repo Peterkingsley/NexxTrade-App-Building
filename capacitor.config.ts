@@ -12,6 +12,10 @@ const config: CapacitorConfig = {
     allowNavigation: [
       'app.nexxtrade.io',
       '*.app.nexxtrade.io' // This covers sub-pages too
+      'accounts.google.com',           // Allow Google Login
+      'oauth2.googleapis.com',         // Google API
+      't.me',                          // Telegram link
+      'oauth.telegram.org'
     ]
   }
 };
