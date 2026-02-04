@@ -8,9 +8,14 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "server": "tsx --watch server/index.ts",
-    "start": "concurrently \"npm run server\" \"npm run dev\""
+    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "cap:sync": "cap sync",
+    "cap:open": "cap open"
   },
   "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "@react-oauth/google": "^0.12.1",
     "axios": "^1.6.7",
     "cors": "^2.8.5",
@@ -24,6 +29,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.24",
