@@ -173,7 +173,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             <div className="w-10 h-10 flex items-center justify-center">
                 <NexxLogoBolt className="w-full h-full" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Nexxtrade</h1>
+            <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
           </div>
         )}
 
@@ -181,7 +181,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           {isLogin ? 'Welcome back' : 'Create Account'}
         </h2>
         <p className="text-gray-400 text-sm">
-          {isLogin ? 'Sign in to access your signals' : 'Join Nexxtrade for premium signals'}
+          {isLogin ? 'Sign in to access your signals' : 'Join NexxTrade for premium signals'}
         </p>
       </div>
 
