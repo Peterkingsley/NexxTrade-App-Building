@@ -1,11 +1,11 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.nexxtrade.app',
+  appId: 'app.nexxtrade.io',
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-    url: 'https://your-website-link.com', // PUT YOUR LIVE SITE HERE
+    url: 'https://app.nexxtrade.io', // PUT YOUR LIVE SITE HERE
     allowNavigation: ['your-website-link.com']
   }
 };
