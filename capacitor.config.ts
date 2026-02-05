@@ -5,11 +5,11 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-    // url: 'https://app.nexxtrade.io', // Commented out to ensure APK uses the local build with latest fixes
+      url: 'https://app.nexxtrade.io', 
     androidScheme: 'https',
     allowNavigation: [
       'app.nexxtrade.io',
-      'www.app.nexxtrade.io',
+      'app.nexxtrade.io',
       'telegram.org',
       'oauth.telegram.org',
       '*.telegram.org'
