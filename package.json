@@ -45,4 +45,8 @@
     "typescript": "^5.3.3",
     "vite": "^5.4.11"
   }
+  "overrides": {
+    "lucide-react": {
+      "react": "$react"
+    }
 }
