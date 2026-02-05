@@ -12,6 +12,7 @@ interface AuthViewProps {
 
 // Bot username provided
 const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
+const GOOGLE_CLIENT_ID = '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com';
 
 // Custom NexxTrade Logo Bolt Icon from Screenshot
 const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
@@ -36,12 +37,18 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
   // Initialize Capacitor Google Auth
   useEffect(() => {
-      GoogleAuth.initialize();
+      if (Capacitor.isNativePlatform()) {
+          GoogleAuth.initialize({
+              clientId: GOOGLE_CLIENT_ID,
+              scopes: ['profile', 'email'],
+              grantOfflineAccess: true,
+          });
+      }
   }, []);
 
   // --- Backend Sync Helper ---
   const authenticateWithBackend = async (provider: AuthProvider, rawData: any) => {
-      setIsLoading(true);
+      // Keep loading true, handled by caller or finally
       try {
           // Map incoming data to our API structure
           const payload = {
@@ -72,8 +79,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       } catch (error) {
           console.error('Backend Authentication Failed:', error);
           alert('Failed to connect to server. Please try again.');
-      } finally {
-          setIsLoading(false);
+          setIsLoading(false); // Only turn off if error, otherwise unmounts
       }
   };
 
@@ -102,16 +108,28 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       } catch (error) {
         console.error('Google Auth Failed:', error);
         setIsLoading(false);
+        alert('Google Web Login Failed. Please try again.');
       }
     },
-    onError: errorResponse => console.log('Google Login Failed:', errorResponse),
+    onError: errorResponse => {
+        console.log('Google Login Failed:', errorResponse);
+        alert('Google Login Failed');
+    },
   });
 
   // --- Native Android/iOS Google Login ---
   const nativeGoogleLogin = async () => {
+      setIsLoading(true); // Immediate visual feedback
       try {
+          console.log("Starting native sign in...");
           const user = await GoogleAuth.signIn();
           
+          if (!user) {
+              setIsLoading(false);
+              alert("Sign in cancelled or failed.");
+              return;
+          }
+
           // Map Native Response to Backend Format
           await authenticateWithBackend('google', {
               id: user.id, // Usually the 'sub' claim
@@ -121,17 +139,22 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               username: user.email.split('@')[0],
               photoUrl: user.imageUrl
           });
-      } catch (error) {
+      } catch (error: any) {
+          setIsLoading(false);
           console.error("Native Google Sign-In Error:", error);
+          // Alert the error so the user knows why it's failing in the APK
+          // Common error 10: SHA-1 mismatch (Debug keystore vs Production Config)
+          alert(`Login Error: ${error.message || JSON.stringify(error)}`);
       }
   };
 
   // --- Unified Handler ---
   const handleGoogleClick = () => {
-      if (Capacitor.getPlatform() === 'web') {
-          webGoogleLogin();
-      } else {
+      // Use isNativePlatform to correctly identify Android/iOS context
+      if (Capacitor.isNativePlatform()) {
           nativeGoogleLogin();
+      } else {
+          webGoogleLogin();
       }
   };
 
