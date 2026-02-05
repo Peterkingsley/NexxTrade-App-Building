@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NexxTrade</string>
+    <string name="title_activity_main">NexxTrade</string>
+    <string name="package_name">app.nexxtrade.io</string>
+    <string name="custom_url_scheme">app.nexxtrade.io</string>
+</resources>
