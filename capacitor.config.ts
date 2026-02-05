@@ -5,21 +5,22 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-      url: 'https://app.nexxtrade.io', 
+    // Crucial: The hostname must match exactly what you set in @BotFather
+    hostname: 'https://www.app.nexxtrade.io/', 
     androidScheme: 'https',
     allowNavigation: [
       'app.nexxtrade.io',
-      'app.nexxtrade.io',
-      'telegram.org',
-      'oauth.telegram.org',
-      '*.telegram.org'
+      '*.telegram.org',
+      'oauth.telegram.org'
     ]
   },
   plugins: {
     GoogleAuth: {
       scopes: ['profile', 'email'],
+      // Ensure this is the "Web Client ID" from Google Console
       serverClientId: '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com',
-      forceCodeForRefreshToken: false
+      // Switch this to true if you are getting "developer error" on Android
+      forceCodeForRefreshToken: true 
     }
   }
 };
