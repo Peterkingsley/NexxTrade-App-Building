@@ -3,7 +3,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import axios from 'axios';
-import { Mail, Lock, User, ArrowLeft, Send, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, ArrowLeft, Send, Loader2, AlertTriangle, X, CheckCircle2, HelpCircle } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
 
 interface AuthViewProps {
@@ -14,7 +14,7 @@ interface AuthViewProps {
 const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 const GOOGLE_CLIENT_ID = '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com';
 
-// Custom NexxTrade Logo Bolt Icon from Screenshot
+// Custom NexxTrade Logo Bolt Icon
 const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
   <svg 
     width="48" 
@@ -32,6 +32,8 @@ const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showConfigHelp, setShowConfigHelp] = useState(false);
   const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -41,14 +43,13 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           GoogleAuth.initialize({
               clientId: GOOGLE_CLIENT_ID,
               scopes: ['profile', 'email'],
-              grantOfflineAccess: false, // Changed to false to prevent 'Something went wrong' (Error 10)
+              grantOfflineAccess: false, 
           });
       }
   }, []);
 
   // --- Backend Sync Helper ---
   const authenticateWithBackend = async (provider: AuthProvider, rawData: any) => {
-      // Keep loading true, handled by caller or finally
       try {
           // Map incoming data to our API structure
           const payload = {
@@ -62,7 +63,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           };
 
           const response = await axios.post('/api/auth/login', payload);
-          const dbUser = response.data; // The user object returned from DB (has id, etc.)
+          const dbUser = response.data; // The user object returned from DB
 
           // Create standard profile object
           const profile: UserProfile = {
@@ -78,8 +79,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
       } catch (error) {
           console.error('Backend Authentication Failed:', error);
-          alert('Failed to connect to server. Please try again.');
-          setIsLoading(false); // Only turn off if error, otherwise unmounts
+          alert('Failed to connect to server. Please check your connection and try again.');
+          setIsLoading(false); 
       }
   };
 
@@ -88,6 +89,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const webGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       setIsLoading(true);
+      setErrorMsg(null);
       try {
         // 1. Get Google User Details
         const userInfo = await axios.get(
@@ -108,25 +110,33 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       } catch (error) {
         console.error('Google Auth Failed:', error);
         setIsLoading(false);
-        alert('Google Web Login Failed. Please try again.');
+        setErrorMsg('Google Web Login Failed. Please try again.');
       }
     },
     onError: errorResponse => {
         console.log('Google Login Failed:', errorResponse);
-        alert('Google Login Failed');
+        setErrorMsg('Google Login Failed');
     },
   });
 
   // --- Native Android/iOS Google Login ---
   const nativeGoogleLogin = async () => {
-      setIsLoading(true); // Immediate visual feedback
+      setIsLoading(true);
+      setErrorMsg(null);
       try {
           console.log("Starting native sign in...");
+          
+          // Re-initialize to ensure fresh config
+          await GoogleAuth.initialize({
+              clientId: GOOGLE_CLIENT_ID,
+              scopes: ['profile', 'email'],
+              grantOfflineAccess: false,
+          });
+
           const user = await GoogleAuth.signIn();
           
           if (!user) {
               setIsLoading(false);
-              alert("Sign in cancelled or failed.");
               return;
           }
 
@@ -142,12 +152,14 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       } catch (error: any) {
           setIsLoading(false);
           console.error("Native Google Sign-In Error:", error);
-          
           const msg = error.message || JSON.stringify(error);
-          if (msg.includes('Something went wrong') || msg.includes('10')) {
-              alert(`Login Error: Developer configuration issue. Please ensure the App SHA-1 fingerprint is added to Firebase/Google Cloud Console.`);
+          
+          // Detect "Something went wrong" (Error 10)
+          if (msg.includes('10') || msg.includes('Something went wrong')) {
+             setErrorMsg("Configuration Error (SHA-1/Package Name).");
+             setShowConfigHelp(true);
           } else {
-              alert(`Login Error: ${msg}`);
+             setErrorMsg(`Google Sign-In Error: ${msg}`);
           }
       }
   };
@@ -172,7 +184,6 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           lastName: user.last_name,
           username: user.username,
           photoUrl: user.photo_url
-          // Note: Telegram login often does not return email permissions by default
       });
     };
 
@@ -197,8 +208,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
     if (!formData.email || !formData.password) return;
     
     // For demo purposes, we will treat this as an 'email' provider login
-    // In a real app, you'd send password to verify hash. Here we just create/fetch user by email.
-    await authenticateWithBackend('google', { // Using 'google' as generic provider alias for simplicity or add 'email'
+    await authenticateWithBackend('google', { 
         id: `email_${formData.email}`,
         email: formData.email,
         firstName: formData.fullName || 'User',
@@ -311,6 +321,19 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
       {/* Social Login Section */}
       <div className="space-y-3">
+        {/* Error Message Display - Strict Mode */}
+        {errorMsg && (
+            <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-3 text-red-400 text-xs font-medium flex items-start gap-2 animate-in slide-in-from-top-2">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <div className="flex-1">
+                    <span>{errorMsg}</span>
+                    {showConfigHelp && (
+                         <button onClick={() => setShowConfigHelp(true)} className="block mt-1 underline text-red-300 hover:text-white">View Troubleshooting</button>
+                    )}
+                </div>
+            </div>
+        )}
+
         {/* Custom Google Button */}
         <button 
           onClick={handleGoogleClick}
@@ -328,12 +351,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
 
         {/* Telegram Widget Wrapper */}
         <div className="w-full relative group">
-          {/* We wrap the script in a div that we can style as a button fallback */}
           <div className="w-full min-h-[54px] border border-gray-600 rounded-xl flex items-center justify-center overflow-hidden transition-all hover:bg-[#2AABEE]/5">
-             {/* Actual Telegram script injects here */}
              <div ref={telegramWrapperRef} className="z-10 scale-90" />
-             
-             {/* Placeholder UI if script takes a second */}
              <div className="absolute inset-0 flex items-center justify-center gap-3 pointer-events-none group-has-[iframe]:hidden">
                 <div className="bg-[#2AABEE] p-1 rounded-full">
                   <Send size={14} fill="currentColor" className="text-white" />
@@ -366,6 +385,50 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           </p>
         )}
       </div>
+
+      {/* Diagnostic/Help Modal for Error 10 */}
+      {showConfigHelp && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowConfigHelp(false)}></div>
+              <div className="bg-dark-800 w-full max-w-sm rounded-3xl overflow-hidden border border-dark-700 shadow-2xl relative animate-in zoom-in-95 duration-200">
+                  <div className="p-5 border-b border-dark-700 flex justify-between items-center bg-dark-800">
+                      <h3 className="text-white text-lg font-bold flex items-center gap-2">
+                          <HelpCircle className="text-red-500" size={20} />
+                          Login Help
+                      </h3>
+                      <button onClick={() => setShowConfigHelp(false)} className="p-1 bg-dark-700 rounded-full text-gray-400 hover:text-white transition">
+                          <X size={18} />
+                      </button>
+                  </div>
+                  <div className="p-5 space-y-4 text-sm text-gray-300">
+                      <p className="font-bold text-white">"Something went wrong" (Error 10) usually means a configuration mismatch.</p>
+                      
+                      <ul className="space-y-3 list-disc pl-4">
+                          <li>
+                              <strong className="text-white">Package Name:</strong> Ensure your app package is exactly <code>app.nexxtrade.io</code> in Google Cloud Console.
+                          </li>
+                          <li>
+                              <strong className="text-white">SHA-1 Fingerprint:</strong> You must add the SHA-1 of the keystore signing this app to Google Console. 
+                              <span className="block text-xs text-gray-500 mt-1">Note: `gradlew assembleDebug` uses a different SHA-1 than a release build.</span>
+                          </li>
+                          <li>
+                              <strong className="text-white">Client ID:</strong> This app is using the Web Client ID <code>711534...</code>. Do not use the Android Client ID in the code.
+                          </li>
+                      </ul>
+
+                      <div className="bg-dark-900 p-3 rounded-lg border border-dark-700 mt-4">
+                          <p className="text-xs text-gray-500 text-center">
+                              This is a security feature from Google. The app cannot login until the signature matches what is in the Cloud Console.
+                          </p>
+                      </div>
+
+                      <button onClick={() => setShowConfigHelp(false)} className="w-full bg-dark-700 hover:bg-dark-600 text-white font-bold py-3 rounded-xl transition">
+                          Close
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
