@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import axios from 'axios';
 import { Mail, Lock, User, ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { AuthProvider, UserProfile } from '../types';
@@ -31,6 +33,11 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
   const telegramWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Capacitor Google Auth
+  useEffect(() => {
+      GoogleAuth.initialize();
+  }, []);
 
   // --- Backend Sync Helper ---
   const authenticateWithBackend = async (provider: AuthProvider, rawData: any) => {
@@ -71,8 +78,8 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   };
 
 
-  // --- Google Login ---
-  const googleLogin = useGoogleLogin({
+  // --- Web Google Login ---
+  const webGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       setIsLoading(true);
       try {
@@ -99,6 +106,34 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
     },
     onError: errorResponse => console.log('Google Login Failed:', errorResponse),
   });
+
+  // --- Native Android/iOS Google Login ---
+  const nativeGoogleLogin = async () => {
+      try {
+          const user = await GoogleAuth.signIn();
+          
+          // Map Native Response to Backend Format
+          await authenticateWithBackend('google', {
+              id: user.id, // Usually the 'sub' claim
+              email: user.email,
+              firstName: user.givenName,
+              lastName: user.familyName,
+              username: user.email.split('@')[0],
+              photoUrl: user.imageUrl
+          });
+      } catch (error) {
+          console.error("Native Google Sign-In Error:", error);
+      }
+  };
+
+  // --- Unified Handler ---
+  const handleGoogleClick = () => {
+      if (Capacitor.getPlatform() === 'web') {
+          webGoogleLogin();
+      } else {
+          nativeGoogleLogin();
+      }
+  };
 
   // --- Telegram Login ---
   useEffect(() => {
@@ -173,7 +208,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             <div className="w-10 h-10 flex items-center justify-center">
                 <NexxLogoBolt className="w-full h-full" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Nexxtrade</h1>
           </div>
         )}
 
@@ -181,7 +216,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           {isLogin ? 'Welcome back' : 'Create Account'}
         </h2>
         <p className="text-gray-400 text-sm">
-          {isLogin ? 'Sign in to access your signals' : 'Join NexxTrade for premium signals'}
+          {isLogin ? 'Sign in to access your signals' : 'Join Nexxtrade for premium signals'}
         </p>
       </div>
 
@@ -251,7 +286,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       <div className="space-y-3">
         {/* Custom Google Button */}
         <button 
-          onClick={() => googleLogin()}
+          onClick={handleGoogleClick}
           disabled={isLoading}
           className="w-full border border-gray-600 hover:bg-white/5 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-3 transition-all text-sm disabled:opacity-50"
         >
