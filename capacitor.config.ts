@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-    url: 'https://www.app.nexxtrade.io',
+    // url: 'https://app.nexxtrade.io', // Commented out to ensure APK uses the local build with latest fixes
+    androidScheme: 'https',
     allowNavigation: [
       'app.nexxtrade.io',
       'www.app.nexxtrade.io',
@@ -18,7 +19,7 @@ const config: CapacitorConfig = {
     GoogleAuth: {
       scopes: ['profile', 'email'],
       serverClientId: '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com',
-      forceCodeForRefreshToken: true
+      forceCodeForRefreshToken: false
     }
   }
 };
