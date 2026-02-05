@@ -21,8 +21,8 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     
-    /* Types */
-    "types": ["node", "vite/client"],
+    /* Types - Included react and react-dom to fix JSX.IntrinsicElements error */
+    "types": ["node", "vite/client", "react", "react-dom"],
     
     /* Path Aliases */
     "baseUrl": ".",
