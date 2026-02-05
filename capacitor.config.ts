@@ -3,25 +3,24 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'app.nexxtrade.io',
   appName: 'NexxTrade',
-  webDir: 'dist', 
+  webDir: 'dist',
   server: {
-    // This is your main entry point
-    url: 'https://www.app.nexxtrade.io', 
-    
-    // These are the "Safe" zones that stay inside the app
+    // url: 'https://app.nexxtrade.io', // Commented out to ensure APK uses the local build with latest fixes
+    androidScheme: 'https',
     allowNavigation: [
       'app.nexxtrade.io',
       'www.app.nexxtrade.io',
-      '*.app.nexxtrade.io',
-      'accounts.google.com',
-      'oauth2.googleapis.com',
-      't.me',
-      'oauth.telegram.org'
+      'telegram.org',
+      'oauth.telegram.org',
+      '*.telegram.org'
     ]
   },
-  // This tricks Google into letting you log in inside the app
-  android: {
-    overrideUserAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36'
+  plugins: {
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com',
+      forceCodeForRefreshToken: false
+    }
   }
 };
 
