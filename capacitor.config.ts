@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     // Crucial: The hostname must match exactly what you set in @BotFather
-    hostname: 'https://www.app.nexxtrade.io/', 
+    hostname: 'app.nexxtrade.io', 
     androidScheme: 'https',
     allowNavigation: [
       'app.nexxtrade.io',
