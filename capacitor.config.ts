@@ -5,13 +5,19 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-    url: 'https://your-website-link.com', // PUT YOUR LIVE SITE HERE
-    allowNavigation: ['your-website-link.com']
+    url: 'https://app.nexxtrade.io',
+    allowNavigation: [
+      'app.nexxtrade.io',
+      'www.app.nexxtrade.io',
+      'telegram.org',
+      'oauth.telegram.org',
+      '*.telegram.org'
+    ]
   },
   plugins: {
     GoogleAuth: {
       scopes: ['profile', 'email'],
-      serverClientId: 'YOUR_GOOGLE_SERVER_CLIENT_ID.apps.googleusercontent.com', // REPACE WITH ACTUAL CLIENT ID
+      serverClientId: '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com',
       forceCodeForRefreshToken: true
     }
   }
