@@ -41,7 +41,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           GoogleAuth.initialize({
               clientId: GOOGLE_CLIENT_ID,
               scopes: ['profile', 'email'],
-              grantOfflineAccess: true,
+              grantOfflineAccess: false, // Changed to false to prevent 'Something went wrong' (Error 10)
           });
       }
   }, []);
@@ -142,9 +142,13 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       } catch (error: any) {
           setIsLoading(false);
           console.error("Native Google Sign-In Error:", error);
-          // Alert the error so the user knows why it's failing in the APK
-          // Common error 10: SHA-1 mismatch (Debug keystore vs Production Config)
-          alert(`Login Error: ${error.message || JSON.stringify(error)}`);
+          
+          const msg = error.message || JSON.stringify(error);
+          if (msg.includes('Something went wrong') || msg.includes('10')) {
+              alert(`Login Error: Developer configuration issue. Please ensure the App SHA-1 fingerprint is added to Firebase/Google Cloud Console.`);
+          } else {
+              alert(`Login Error: ${msg}`);
+          }
       }
   };
 
