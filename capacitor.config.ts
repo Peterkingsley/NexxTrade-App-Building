@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   server: {
     // Crucial: The hostname must match exactly what you set in @BotFather
     // Changed from 'app.nexxtrade.io' to 'nexxtrade.io' to match production bot domain
-    hostname: 'nexxtrade.io',
+    hostname: 'app.nexxtrade.io',
     androidScheme: 'https',
     allowNavigation: [
       'nexxtrade.io',
