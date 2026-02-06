@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'NexxTrade',
   webDir: 'dist',
   server: {
-    // The hostname used for internal routing
+    // Crucial: The hostname must match exactly what you set in @BotFather
     hostname: 'app.nexxtrade.io', 
     androidScheme: 'https',
     allowNavigation: [
@@ -17,11 +17,9 @@ const config: CapacitorConfig = {
   plugins: {
     GoogleAuth: {
       scopes: ['profile', 'email'],
-      /* IMPORTANT: This MUST be the "Web Client ID". 
-         The Android Client ID from your screenshot is handled automatically 
-         by Google Play Services via the SHA-1 and Package Name.
-      */
+      // Ensure this is the "Web Client ID" from Google Console
       serverClientId: '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com',
+      // Switch this to true if you are getting "developer error" on Android
       forceCodeForRefreshToken: true 
     }
   }
