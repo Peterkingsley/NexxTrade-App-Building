@@ -60,17 +60,34 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ steps, isOpen, onComple
     };
   }, [updatePosition, windowSize]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (isLastStep) {
       onComplete();
     } else {
       setCurrentStepIndex(prev => prev + 1);
     }
-  };
+  }, [isLastStep, onComplete]);
 
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     onComplete();
-  };
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'Enter') {
+        handleNext();
+      } else if (e.key === 'ArrowLeft' && currentStepIndex > 0) {
+        setCurrentStepIndex(prev => prev - 1);
+      } else if (e.key === 'Escape') {
+        handleSkip();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, currentStepIndex, handleNext, handleSkip]);
 
   if (!isOpen) return null;
 
@@ -108,11 +125,18 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ steps, isOpen, onComple
             transform: targetRect ? 'none' : 'translateY(-50%)'
         }}
       >
-        <div className="bg-dark-800 border border-dark-700 p-5 rounded-2xl shadow-2xl max-w-sm w-full pointer-events-auto relative animate-in fade-in zoom-in-95 duration-300">
+        <div
+          className="bg-dark-800 border border-dark-700 p-5 rounded-2xl shadow-2xl max-w-sm w-full pointer-events-auto relative animate-in fade-in zoom-in-95 duration-300"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="tour-title"
+          aria-describedby="tour-description"
+        >
             {/* Close Button */}
             <button 
                 onClick={handleSkip}
                 className="absolute top-4 right-4 text-gray-500 hover:text-white transition"
+                aria-label="Skip tour"
             >
                 <X size={18} />
             </button>
@@ -122,8 +146,8 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({ steps, isOpen, onComple
                 <span className="text-brand-green text-xs font-bold uppercase tracking-wider mb-2 block">
                     Step {currentStepIndex + 1} of {steps.length}
                 </span>
-                <h3 className="text-white text-lg font-bold mb-2">{currentStep.title}</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">{currentStep.description}</p>
+                <h3 id="tour-title" className="text-white text-lg font-bold mb-2">{currentStep.title}</h3>
+                <p id="tour-description" className="text-gray-400 text-sm leading-relaxed">{currentStep.description}</p>
             </div>
 
             {/* Actions */}
