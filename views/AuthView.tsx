@@ -228,12 +228,11 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
       {/* Header Section */}
       <div className="mb-8">
         {isLogin && (
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-2 mb-6">
             <div className="w-14 h-14 flex items-center justify-center">
               <img src={`${import.meta.env.BASE_URL}logo.png`} alt="NexxTrade logo" className="w-full h-full object-contain" />
-              <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
             </div>
-            {/* <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1> */}
+            <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
           </div>
         )}
 
