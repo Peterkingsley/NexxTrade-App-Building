@@ -23,7 +23,7 @@ const NexxLogoImg = ({ size = 24, className = "", strokeWidth, ...rest }: any) =
   );
 };
 
-const BottomNav: React.FC<BottomNavProps> = ({ currentView, setView, userProfile }) => {
+const BottomNav: React.FC<BottomNavProps> = React.memo(({ currentView, setView, userProfile }) => {
   const isAdmin = userProfile?.role === 'admin';
 
   const navItems = [
@@ -65,6 +65,6 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentView, setView, userProfile
       </div>
     </div>
   );
-};
+});
 
 export default BottomNav;

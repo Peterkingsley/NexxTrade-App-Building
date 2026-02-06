@@ -20,7 +20,7 @@ const COIN_GECKO_MAP: Record<string, string> = {
     'ALGO': 'algorand'
 };
 
-const POLLING_INTERVAL = 1000; // 1 second (High frequency)
+const POLLING_INTERVAL = 15000; // 15 seconds (Optimized for rate limits)
 
 export const useBinancePrices = (pairs: string[]) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
@@ -95,7 +95,22 @@ export const useBinancePrices = (pairs: string[]) => {
             });
 
             if (isMountedRef.current) {
-                setPrices(prev => ({ ...prev, ...newPrices }));
+                // Optimization: Only update state if prices have actually changed
+                // This prevents unnecessary re-renders of the entire app tree
+                setPrices(prev => {
+                    let hasChanged = false;
+                    const next = { ...prev };
+
+                    Object.keys(newPrices).forEach(symbol => {
+                        if (prev[symbol] !== newPrices[symbol]) {
+                            next[symbol] = newPrices[symbol];
+                            hasChanged = true;
+                        }
+                    });
+
+                    return hasChanged ? next : prev;
+                });
+
                 retryCountRef.current = 0; // Reset backoff on success
                 
                 // Schedule next poll
