@@ -10,16 +10,19 @@ interface SidebarProps {
 }
 
 // Use logo from public folder for home icon
-const NexxLogoImg = ({ size = 24, className = "", strokeWidth, ...rest }: any) => (
-  <img
-    src="/logo.png"
-    alt="NexxTrade"
-    width={size}
-    height={size}
-    className={`object-contain ${className}`}
-    {...rest}
-  />
-);
+const NexxLogoImg = ({ size = 24, className = "", strokeWidth, ...rest }: any) => {
+  const src = `${import.meta.env.BASE_URL}logo.png`;
+  return (
+    <img
+      src={src}
+      alt="NexxTrade"
+      width={size}
+      height={size}
+      className={`object-contain ${className}`}
+      {...rest}
+    />
+  );
+};
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout, userProfile }) => {
   const isAdmin = userProfile?.role === 'admin';
