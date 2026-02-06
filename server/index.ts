@@ -52,12 +52,14 @@ app.get('/uploads/:filename', async (req: any, res: any) => {
         }
         
         // Fallback to filesystem (legacy support or local dev)
-        const filePath = path.join(uploadsDir, filename);
-        if (fs.existsSync(filePath)) {
-             return res.sendFile(filePath);
-        }
-
-        res.status(404).send('File not found');
+        // res.sendFile with the 'root' option automatically prevents path traversal
+        res.sendFile(filename, { root: uploadsDir }, (err: any) => {
+            if (err) {
+                if (!res.headersSent) {
+                    res.status(404).send('File not found');
+                }
+            }
+        });
 
     } catch (error) {
         console.error("Error serving file:", error);
@@ -85,7 +87,6 @@ if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
     console.log("No VAPID keys found in .env. Generating ephemeral keys for this session.");
     vapidKeys = webpush.generateVAPIDKeys();
     console.log("EPHEMERAL PUBLIC KEY:", vapidKeys.publicKey);
-    console.log("EPHEMERAL PRIVATE KEY:", vapidKeys.privateKey);
 }
 
 webpush.setVapidDetails(
