@@ -8,19 +8,16 @@ interface BottomNavProps {
   userProfile: UserProfile | null;
 }
 
-// Custom NexxTrade Logo Icon
-const NexxLogoIcon = ({ size = 24, className = "" }: { size?: number | string, strokeWidth?: number, className?: string }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="currentColor" 
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <path d="M4.5 12.5L10 7H15.5L12.5 10H10.5V12L7.5 15H2L4.5 12.5Z" />
-    <path d="M19.5 11.5L14 17H8.5L11.5 14H13.5V12L16.5 9H22L19.5 11.5Z" />
-  </svg>
+// Use logo from public folder for home icon
+const NexxLogoImg = ({ size = 24, className = "", strokeWidth, ...rest }: any) => (
+  <img
+    src="/logo.png"
+    alt="NexxTrade"
+    width={size}
+    height={size}
+    className={`object-contain ${className}`}
+    {...rest}
+  />
 );
 
 const BottomNav: React.FC<BottomNavProps> = ({ currentView, setView, userProfile }) => {

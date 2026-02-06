@@ -14,20 +14,7 @@ interface AuthViewProps {
 const TELEGRAM_BOT_USERNAME = 'NexxTradeApp_bot';
 const GOOGLE_CLIENT_ID = '711534694113-s4qmdjctfmrit0isf8hfdja9lbl433t4.apps.googleusercontent.com';
 
-// Custom NexxTrade Logo Bolt Icon
-const NexxLogoBolt = ({ className = "" }: { className?: string }) => (
-  <svg 
-    width="48" 
-    height="48" 
-    viewBox="0 0 48 48" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <path d="M14 10L32 10L24 22L30 22L16 38L22 26L16 26L14 10Z" fill="#10B981" stroke="#10B981" strokeWidth="2" strokeLinejoin="round"/>
-    <path d="M26 8L10 32L18 32L14 44L34 16L24 16L30 8L26 8Z" fill="#10B981" />
-  </svg>
-);
+// Using logo from public folder (public/logo.png)
 
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -243,7 +230,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         {isLogin && (
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 flex items-center justify-center">
-                <NexxLogoBolt className="w-full h-full" />
+                <img src="/logo.png" alt="Nexxtrade logo" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Nexxtrade</h1>
           </div>
