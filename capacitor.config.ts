@@ -6,10 +6,11 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     // Crucial: The hostname must match exactly what you set in @BotFather
-    hostname: 'app.nexxtrade.io', 
+    // Changed from 'app.nexxtrade.io' to 'nexxtrade.io' to match production bot domain
+    hostname: 'nexxtrade.io',
     androidScheme: 'https',
     allowNavigation: [
-      'app.nexxtrade.io',
+      'nexxtrade.io',
       '*.telegram.org',
       'oauth.telegram.org'
     ]
