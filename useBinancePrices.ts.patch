@@ -1,0 +1,32 @@
+<<<<<<< SEARCH
+            if (isMountedRef.current) {
+                setPrices(prev => ({ ...prev, ...newPrices }));
+                retryCountRef.current = 0; // Reset backoff on success
+
+                // Schedule next poll
+                timeoutRef.current = setTimeout(fetchPrices, POLLING_INTERVAL);
+            }
+=======
+            if (isMountedRef.current) {
+                // Optimization: Only update state if prices have actually changed
+                // This prevents unnecessary re-renders of the entire app tree
+                setPrices(prev => {
+                    let hasChanged = false;
+                    const next = { ...prev };
+
+                    Object.keys(newPrices).forEach(symbol => {
+                        if (prev[symbol] !== newPrices[symbol]) {
+                            next[symbol] = newPrices[symbol];
+                            hasChanged = true;
+                        }
+                    });
+
+                    return hasChanged ? next : prev;
+                });
+
+                retryCountRef.current = 0; // Reset backoff on success
+
+                // Schedule next poll
+                timeoutRef.current = setTimeout(fetchPrices, POLLING_INTERVAL);
+            }
+>>>>>>> REPLACE

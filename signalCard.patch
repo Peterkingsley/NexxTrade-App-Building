@@ -1,0 +1,10 @@
+<<<<<<< SEARCH
+const SignalCard: React.FC<SignalCardProps> = ({ signal, livePrice, onUpgrade }) => {
+=======
+const SignalCard: React.FC<SignalCardProps> = React.memo(({ signal, livePrice, onUpgrade }) => {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+export default SignalCard;
+=======
+export default SignalCard;
+>>>>>>> REPLACE
