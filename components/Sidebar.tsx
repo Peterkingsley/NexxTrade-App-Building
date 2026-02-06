@@ -24,7 +24,7 @@ const NexxLogoImg = ({ size = 24, className = "", strokeWidth, ...rest }: any) =
   );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout, userProfile }) => {
+const Sidebar: React.FC<SidebarProps> = React.memo(({ currentView, setView, onLogout, userProfile }) => {
   const isAdmin = userProfile?.role === 'admin';
 
   const navItems = [
@@ -93,6 +93,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout, userP
       </div>
     </div>
   );
-};
+});
 
 export default Sidebar;
