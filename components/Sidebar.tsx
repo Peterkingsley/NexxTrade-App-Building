@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onLogout, userP
   const isAdmin = userProfile?.role === 'admin';
 
   const navItems = [
-    { id: 'home', label: 'Home', icon: NexxLogoIcon },
+    { id: 'home', label: 'Home', icon: NexxLogoImg },
     { id: 'signals', label: 'Signals', icon: Activity },
     { id: 'performance', label: 'Performance', icon: BarChart2 },
     { id: 'academy', label: 'Academy', icon: BookOpen },
