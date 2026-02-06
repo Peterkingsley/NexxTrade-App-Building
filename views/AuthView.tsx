@@ -233,7 +233,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               <img src={`${import.meta.env.BASE_URL}logo.png`} alt="NexxTrade logo" className="w-full h-full object-contain" />
               <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
+            {/* <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1> */}
           </div>
         )}
 
