@@ -230,9 +230,10 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         {isLogin && (
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 flex items-center justify-center">
-              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Nexxtrade logo" className="w-full h-full object-contain" />
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="NexxTrade logo" className="w-full h-full object-contain" />
+              <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Nexxtrade</h1>
+            <h1 className="text-2xl font-bold tracking-tight">NexxTrade</h1>
           </div>
         )}
 
@@ -240,7 +241,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
           {isLogin ? 'Welcome back' : 'Create Account'}
         </h2>
         <p className="text-gray-400 text-sm">
-          {isLogin ? 'Sign in to access your signals' : 'Join Nexxtrade for premium signals'}
+          {isLogin ? 'Sign in to access your signals' : 'Join NexxTrade for premium signals'}
         </p>
       </div>
 
@@ -392,7 +393,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                       
                       <ul className="space-y-3 list-disc pl-4">
                           <li>
-                              <strong className="text-white">Package Name:</strong> Ensure your app package is exactly <code>app.nexxtrade.io</code> in Google Cloud Console.
+                              <strong className="text-white">Package Name:</strong> Ensure your app package is exactly <code>app.NexxTrade.io</code> in Google Cloud Console.
                           </li>
                           <li>
                               <strong className="text-white">SHA-1 Fingerprint:</strong> You must add the SHA-1 of the keystore signing this app to Google Console. 
