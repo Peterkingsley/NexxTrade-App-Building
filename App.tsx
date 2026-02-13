@@ -39,7 +39,7 @@ const MOCK_SIGNALS: Signal[] = [
     type: 'Futures',
     side: 'Long',
     entry: '62,450.00',
-    targets: ['63,200.00', '64,000.00', '65,500.00'],
+    tpTargets: ['63,200.00', '64,000.00', '65,500.00'],
     stopLoss: '61,200.00',
     status: 'active',
     timestamp: new Date().toISOString(),
