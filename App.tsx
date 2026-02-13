@@ -46,7 +46,9 @@ const MOCK_SIGNALS: Signal[] = [
   ],
     stopLoss: '61,200.00',
     status: 'active',
-    timestamp: new Date().toISOString(),
+    pnl: 0,
+    timeAgo: 'Just now',
+    created_at: new Date().toISOString(),
     leverage: '50X',
     analysis: 'Bullish divergence on 4H RSI with strong support at 62k.'
   }

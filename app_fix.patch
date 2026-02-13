@@ -1,0 +1,14 @@
+<<<<<<< SEARCH
+    stopLoss: '61,200.00',
+    status: 'active',
+    leverage: '50X',
+    analysis: 'Bullish divergence on 4H RSI with strong support at 62k.'
+=======
+    stopLoss: '61,200.00',
+    status: 'active',
+    pnl: 0,
+    timeAgo: 'Just now',
+    created_at: new Date().toISOString(),
+    leverage: '50X',
+    analysis: 'Bullish divergence on 4H RSI with strong support at 62k.'
+>>>>>>> REPLACE
